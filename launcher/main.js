@@ -95,10 +95,16 @@ async function startLaunchSequence() {
 // ПРОВЕРКА ОБНОВЛЕНИЙ
 // ============================================
 
+function getGitHubHeaders() {
+    const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || process.env.GITHUB_API_TOKEN;
+    if (!token) return {};
+    return { Authorization: `Bearer ${token}` };
+}
+
 async function getLatestRelease() {
     const response = await axios.get(
         `https://api.github.com/repos/${GITHUB_REPO}/releases`,
-        { timeout: 10000 }
+        { timeout: 10000, headers: getGitHubHeaders() }
     );
 
     const releases = Array.isArray(response.data) ? response.data : [];
@@ -194,6 +200,10 @@ async function downloadAndInstallApp() {
         
     } catch (error) {
         console.error('[Launcher] Download/Install error:', error);
+        const status = error?.response?.status;
+        if (status === 404) {
+            throw new Error('Не найден релиз на GitHub (репозиторий приватный или нет published релиза).');
+        }
         throw new Error(`Не удалось установить: ${error.message}`);
     }
 }
