@@ -4,7 +4,7 @@
   "version": "2.0.0",
   "identifier": "com.anticbrowser.app",
   "build": {
-    "frontendDist": "../build",
+    "frontendDist": "../dist",
     "devUrl": "http://localhost:3000",
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build"
