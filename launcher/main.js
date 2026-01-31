@@ -176,12 +176,12 @@ async function downloadAndInstallApp() {
         
         updateStatus('Установка...', 50);
         
-        // Запускаем установщик (тихая установка)
-        await new Promise((resolve, reject) => {
-            exec(`msiexec /i "${installerPath}" /qn /norestart`, (error) => {
+        // Запускаем установщик (тихая установка, per-user)
+        const logPath = path.join(app.getPath('temp'), 'antic-browser-install.log');
+        await new Promise((resolve) => {
+            const cmd = `msiexec /i "${installerPath}" /qn /norestart /l*v "${logPath}" ALLUSERS=2 MSIINSTALLPERUSER=1`;
+            exec(cmd, (error) => {
                 if (error && error.code !== 0) {
-                    // Код 0 или undefined - успешная установка
-                    // Иногда msiexec возвращает код даже при успехе
                     console.warn('[Launcher] Installer warning:', error);
                 }
                 resolve();
@@ -189,7 +189,21 @@ async function downloadAndInstallApp() {
         });
         
         // Ждём завершения установки
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        await new Promise(resolve => setTimeout(resolve, 5000));
+
+        if (!fs.existsSync(APP_EXE)) {
+            // Повтор с повышенными правами (UAC)
+            updateStatus('Требуются права администратора. Повторная установка...', 55);
+            await new Promise((resolve) => {
+                const args = `/i "${installerPath}" /passive /norestart /l*v "${logPath}"`;
+                const ps = `Start-Process msiexec -ArgumentList '${args}' -Verb RunAs -Wait`;
+                exec(`powershell -Command "${ps}"`, () => resolve());
+            });
+
+            if (!fs.existsSync(APP_EXE)) {
+                throw new Error(`Установка не завершилась. Проверь лог: ${logPath}`);
+            }
+        }
         
         // Удаляем установщик
         try {
