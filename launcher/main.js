@@ -9,7 +9,15 @@ let mainWindow;
 const APP_NAME = 'Antic Browser';
 const GITHUB_REPO = 'CJ-aezakmi/UKULUT';
 const INSTALL_DIR = path.join(process.env.LOCALAPPDATA, 'Programs', APP_NAME);
-const APP_EXE = path.join(INSTALL_DIR, 'Antic Browser.exe');
+const CANDIDATE_EXES = [
+    path.join(INSTALL_DIR, 'Antic Browser.exe'),
+    path.join(process.env.ProgramFiles || 'C:\\Program Files', 'AnticBrowser', 'antic.exe'),
+    path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Antic Browser', 'Antic Browser.exe')
+];
+
+function findInstalledExe() {
+    return CANDIDATE_EXES.find(p => fs.existsSync(p)) || null;
+}
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -50,7 +58,7 @@ async function startLaunchSequence() {
         updateStatus('Проверка установки...', 10);
         
         // Шаг 1: Проверка установлен ли Antic Browser
-        const isInstalled = fs.existsSync(APP_EXE);
+        const isInstalled = Boolean(findInstalledExe());
         
         if (!isInstalled) {
             updateStatus('Antic Browser не установлен. Скачивание...', 20);
@@ -191,7 +199,7 @@ async function downloadAndInstallApp() {
         // Ждём завершения установки
         await new Promise(resolve => setTimeout(resolve, 5000));
 
-        if (!fs.existsSync(APP_EXE)) {
+        if (!findInstalledExe()) {
             // Повтор с повышенными правами (UAC)
             updateStatus('Требуются права администратора. Повторная установка...', 55);
             await new Promise((resolve) => {
@@ -200,7 +208,7 @@ async function downloadAndInstallApp() {
                 exec(`powershell -Command "${ps}"`, () => resolve());
             });
 
-            if (!fs.existsSync(APP_EXE)) {
+            if (!findInstalledExe()) {
                 throw new Error(`Установка не завершилась. Проверь лог: ${logPath}`);
             }
         }
@@ -286,12 +294,13 @@ async function checkDependencies() {
 
 async function launchApp() {
     try {
-        if (!fs.existsSync(APP_EXE)) {
+        const exePath = findInstalledExe();
+        if (!exePath) {
             throw new Error('Приложение не найдено после установки');
         }
         
         // Запускаем приложение
-        spawn(APP_EXE, [], {
+        spawn(exePath, [], {
             detached: true,
             stdio: 'ignore'
         }).unref();
