@@ -95,6 +95,22 @@ async function startLaunchSequence() {
 // ПРОВЕРКА ОБНОВЛЕНИЙ
 // ============================================
 
+async function getLatestRelease() {
+    const response = await axios.get(
+        `https://api.github.com/repos/${GITHUB_REPO}/releases`,
+        { timeout: 10000 }
+    );
+
+    const releases = Array.isArray(response.data) ? response.data : [];
+    const latest = releases.find(r => !r.draft && !r.prerelease);
+
+    if (!latest) {
+        throw new Error('Не найден опубликованный релиз');
+    }
+
+    return latest;
+}
+
 async function checkForUpdates() {
     try {
         // Получаем текущую версию
@@ -107,11 +123,8 @@ async function checkForUpdates() {
         }
         
         // Получаем последнюю версию с GitHub
-        const response = await axios.get(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
-            timeout: 10000
-        });
-        
-        const latestVersion = response.data.tag_name.replace('v', '');
+        const latestRelease = await getLatestRelease();
+        const latestVersion = String(latestRelease.tag_name || '').replace('v', '');
         
         console.log(`[Launcher] Current: ${currentVersion}, Latest: ${latestVersion}`);
         
@@ -129,8 +142,8 @@ async function checkForUpdates() {
 async function downloadAndInstallApp() {
     try {
         // Получаем ссылку на установщик
-        const response = await axios.get(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`);
-        const asset = response.data.assets.find(a => a.name.endsWith('.msi'));
+        const release = await getLatestRelease();
+        const asset = (release.assets || []).find(a => a.name.endsWith('.msi'));
         
         if (!asset) {
             throw new Error('Установщик не найден');
