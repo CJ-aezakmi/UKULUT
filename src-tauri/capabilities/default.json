@@ -1,0 +1,27 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "enables the default permissions",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-set-title",
+    "shell:allow-open",
+    "http:default",
+    {
+      "identifier": "http:allow-fetch",
+      "allow": [
+        { "url": "https://api.sx.org/*" },
+        { "url": "https://my.sx.org/*" },
+        { "url": "https://app.cyberyozh.com/*" },
+        { "url": "http://ip-api.com/*" },
+        { "url": "https://ipapi.co/*" },
+        { "url": "https://httpbin.org/*" },
+        { "url": "https://api.ipify.org/*" }
+      ]
+    }
+  ]
+}

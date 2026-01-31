@@ -1,0 +1,3257 @@
+openapi: 3.0.3
+info:
+  title: APP Cyberyozh API
+  version: 1.0.0
+  description: Comprehensive API documentation for the Cyberyozh application.
+paths:
+  /api/v1/numbers/countries/:
+    get:
+      operationId: apiV1NumbersCountriesRetrieve
+      description: |-
+        Get the list of all countries and their code,
+        which should be passed in the /search/ point
+        in the country parameter
+      tags:
+      - sms
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/numbers/services/:
+    get:
+      operationId: apiV1NumbersServicesRetrieve
+      description: |-
+        Get the list of all services and their code,
+        which should be passed in the /search/ point
+        in the service parameter
+      tags:
+      - sms
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/numbers/search/:
+    get:
+      operationId: apiV1NumbersSearchList
+      description: |-
+        Get services
+        if you pass only countries in the query, then the services of this country will be provided.
+        if you pass in the request only the service, then all countries of this service will be available.
+
+        ?get params:
+
+        ```
+            provider: ENUM(virtual | residental) (required)
+            period: ENUM(MIN_15)                 (required)
+
+            country: str                         (optional)
+            service: str                         (optional)
+        ```
+
+        Request example 1
+        `/api/v1/numbers/search/?provider=virtual&country=2&period=MIN_15&service=ok`
+      parameters:
+      - in: query
+        name: country
+        schema:
+          type: integer
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: period
+        schema:
+          enum:
+          - MIN_15
+          - HOUR_4
+          - HOUR_12
+          - DAY
+          - WEEK
+          - WEEK_2
+          - MONTH
+          type: string
+          minLength: 1
+        description: |-
+          * `MIN_15` - MIN_15
+          * `HOUR_4` - HOUR_4
+          * `HOUR_12` - HOUR_12
+          * `DAY` - DAY
+          * `WEEK` - WEEK
+          * `WEEK_2` - WEEK_2
+          * `MONTH` - MONTH
+        required: true
+      - in: query
+        name: provider
+        schema:
+          enum:
+          - none
+          - virtual
+          - virtual_rent
+          - residential
+          - residential_rent
+          type: string
+          minLength: 1
+        description: |-
+          * `none` - Default provider
+          * `virtual` - SMS Virtual
+          * `virtual_rent` - SMS Virtual Rent
+          * `residential` - SMS Residential
+          * `residential_rent` - SMS Residential Rent
+        required: true
+      - in: query
+        name: service
+        schema:
+          type: string
+          minLength: 1
+      tags:
+      - sms
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedServiceCommonList'
+          description: ''
+  /api/v1/numbers/history/:
+    get:
+      operationId: apiV1NumbersHistoryRetrieve
+      description: All numbers except active
+      tags:
+      - sms
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/numbers/:
+    get:
+      operationId: apiV1NumbersList
+      tags:
+      - sms
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PhoneNumberOrderAPI'
+          description: ''
+    post:
+      operationId: apiV1NumbersCreate
+      tags:
+      - sms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NumbersCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/NumbersCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/NumbersCreateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NumbersCreate'
+          description: ''
+  /api/v1/numbers/{id}/:
+    get:
+      operationId: apiV1NumbersRetrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this phone number order.
+        required: true
+      tags:
+      - sms
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhoneNumberOrderAPI'
+          description: ''
+  /api/v1/numbers/{id}/cancel/:
+    put:
+      operationId: apiV1NumbersCancelUpdate
+      description: Endpoint to cancel a number.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this phone number order.
+        required: true
+      tags:
+      - sms
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/numbers/{id}/extend/:
+    put:
+      operationId: apiV1NumbersExtendUpdate
+      description: Endpoint to extend a number.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this phone number order.
+        required: true
+      tags:
+      - sms
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/numbers/{id}/replay/:
+    put:
+      operationId: apiV1NumbersReplayUpdate
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this phone number order.
+        required: true
+      tags:
+      - sms
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/users/balance/:
+    get:
+      operationId: apiV1UsersBalanceRetrieve
+      tags:
+      - user
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/proxies/shop/:
+    get:
+      operationId: apiV1ProxiesShopList
+      parameters:
+      - in: query
+        name: access_type
+        schema:
+          type: string
+          enum:
+          - private
+          - shared
+        description: |-
+          Тип Proxy: shared - делится между несколькими покупателями и private - единоличное владение.
+
+          * `shared` - Shared
+          * `private` - Private
+      - in: query
+        name: country_code
+        schema:
+          type: string
+          enum:
+          - AD
+          - AE
+          - AF
+          - AG
+          - AI
+          - AL
+          - AM
+          - AO
+          - AQ
+          - AR
+          - AS
+          - AT
+          - AU
+          - AW
+          - AX
+          - AZ
+          - BA
+          - BB
+          - BD
+          - BE
+          - BF
+          - BG
+          - BH
+          - BI
+          - BJ
+          - BL
+          - BM
+          - BN
+          - BO
+          - BQ
+          - BR
+          - BS
+          - BT
+          - BV
+          - BW
+          - BY
+          - BZ
+          - CA
+          - CC
+          - CD
+          - CF
+          - CG
+          - CH
+          - CI
+          - CK
+          - CL
+          - CM
+          - CN
+          - CO
+          - CR
+          - CU
+          - CV
+          - CW
+          - CX
+          - CY
+          - CZ
+          - DE
+          - DJ
+          - DK
+          - DM
+          - DO
+          - DZ
+          - EC
+          - EE
+          - EG
+          - EH
+          - ER
+          - ES
+          - ET
+          - FI
+          - FJ
+          - FK
+          - FM
+          - FO
+          - FR
+          - GA
+          - GB
+          - GD
+          - GE
+          - GF
+          - GG
+          - GH
+          - GI
+          - GL
+          - GM
+          - GN
+          - GP
+          - GQ
+          - GR
+          - GS
+          - GT
+          - GU
+          - GW
+          - GY
+          - HK
+          - HM
+          - HN
+          - HR
+          - HT
+          - HU
+          - ID
+          - IE
+          - IL
+          - IM
+          - IN
+          - IO
+          - IQ
+          - IR
+          - IS
+          - IT
+          - JE
+          - JM
+          - JO
+          - JP
+          - KE
+          - KG
+          - KH
+          - KI
+          - KM
+          - KN
+          - KP
+          - KR
+          - KW
+          - KY
+          - KZ
+          - LA
+          - LB
+          - LC
+          - LI
+          - LK
+          - LR
+          - LS
+          - LT
+          - LU
+          - LV
+          - LY
+          - MA
+          - MC
+          - MD
+          - ME
+          - MF
+          - MG
+          - MH
+          - MK
+          - ML
+          - MM
+          - MN
+          - MO
+          - MP
+          - MQ
+          - MR
+          - MS
+          - MT
+          - MU
+          - MV
+          - MW
+          - MX
+          - MY
+          - MZ
+          - NA
+          - NC
+          - NE
+          - NF
+          - NG
+          - NI
+          - NL
+          - 'NO'
+          - NP
+          - NR
+          - NU
+          - NZ
+          - OM
+          - PA
+          - PE
+          - PF
+          - PG
+          - PH
+          - PK
+          - PL
+          - PM
+          - PN
+          - PR
+          - PS
+          - PT
+          - PW
+          - PY
+          - QA
+          - RE
+          - RO
+          - RS
+          - RU
+          - RW
+          - SA
+          - SB
+          - SC
+          - SD
+          - SE
+          - SG
+          - SH
+          - SI
+          - SJ
+          - SK
+          - SL
+          - SM
+          - SN
+          - SO
+          - SR
+          - SS
+          - ST
+          - SV
+          - SX
+          - SY
+          - SZ
+          - TC
+          - TD
+          - TF
+          - TG
+          - TH
+          - TJ
+          - TK
+          - TL
+          - TM
+          - TN
+          - TO
+          - TR
+          - TT
+          - TV
+          - TW
+          - TZ
+          - UA
+          - UG
+          - UM
+          - US
+          - UY
+          - UZ
+          - VA
+          - VC
+          - VE
+          - VG
+          - VI
+          - VN
+          - VU
+          - WF
+          - WS
+          - XK
+          - YE
+          - YT
+          - ZA
+          - ZM
+          - ZW
+        description: |-
+          Proxy's country
+
+          * `AF` - Афганистан
+          * `AX` - Аландские острова
+          * `AL` - Албания
+          * `DZ` - Алжир
+          * `AS` - Американское Самоа
+          * `AD` - Андорра
+          * `AO` - Ангола
+          * `AI` - Ангилья
+          * `AQ` - Антарктида
+          * `AG` - Антигуа и Барбуда
+          * `AR` - Аргентина
+          * `AM` - Армения
+          * `AW` - Аруба
+          * `AU` - Австралия
+          * `AT` - Австрия
+          * `AZ` - Азербайджан
+          * `BS` - Багамские острова
+          * `BH` - Бахрейн
+          * `BD` - Бангладеш
+          * `BB` - Барбадос
+          * `BY` - Беларусь
+          * `BE` - Бельгия
+          * `BZ` - Белиз
+          * `BJ` - Бенин
+          * `BM` - Бермудские острова
+          * `BT` - Бутан
+          * `BO` - Боливия
+          * `BQ` - Бонайре, Синт-Эстатиус и Саба
+          * `BA` - Босния и Герцеговина
+          * `BW` - Ботсвана
+          * `BV` - Остров Буве
+          * `BR` - Бразилия
+          * `IO` - Британская территория в Индийском океане
+          * `BN` - Бруней
+          * `BG` - Болгария
+          * `BF` - Буркина-Фасо
+          * `BI` - Бурунди
+          * `CV` - Кабо-Верде
+          * `KH` - Камбоджа
+          * `CM` - Камерун
+          * `CA` - Канада
+          * `KY` - Каймановы острова
+          * `CF` - Центральноафриканская Республика
+          * `TD` - Чад
+          * `CL` - Чили
+          * `CN` - Китай
+          * `CX` - Остров Рождества
+          * `CC` - Кокосовые (Килинг) острова
+          * `CO` - Колумбия
+          * `KM` - Коморские острова
+          * `CG` - Конго
+          * `CD` - Конго (Демократическая Республика)
+          * `CK` - Острова Кука
+          * `CR` - Коста-Рика
+          * `CI` - Кот-д'Ивуар
+          * `HR` - Хорватия
+          * `CU` - Куба
+          * `CW` - Кюрасао
+          * `CY` - Кипр
+          * `CZ` - Чехия
+          * `DK` - Дания
+          * `DJ` - Джибути
+          * `DM` - Доминика
+          * `DO` - Доминиканская Республика
+          * `EC` - Эквадор
+          * `EG` - Египет
+          * `SV` - Сальвадор
+          * `GQ` - Экваториальная Гвинея
+          * `ER` - Эритрея
+          * `EE` - Эстония
+          * `SZ` - Эсватини
+          * `ET` - Эфиопия
+          * `FK` - Фолклендские (Мальвинские) острова
+          * `FO` - Фарерские острова
+          * `FJ` - Фиджи
+          * `FI` - Финляндия
+          * `FR` - Франция
+          * `GF` - Французская Гвиана
+          * `PF` - Французская Полинезия
+          * `TF` - Французские южные территории
+          * `GA` - Габон
+          * `GM` - Гамбия
+          * `GE` - Грузия
+          * `DE` - Германия
+          * `GH` - Гана
+          * `GI` - Гибралтар
+          * `GR` - Греция
+          * `GL` - Гренландия
+          * `GD` - Гренада
+          * `GP` - Гваделупа
+          * `GU` - Гуам
+          * `GT` - Гватемала
+          * `GG` - Гернси
+          * `GN` - Гвинея
+          * `GW` - Гвинея-Бисау
+          * `GY` - Гайана
+          * `HT` - Гаити
+          * `HM` - Остров Херд и Острова Макдоналд
+          * `VA` - Святой Престол
+          * `HN` - Гондурас
+          * `HK` - Гонконг
+          * `HU` - Венгрия
+          * `IS` - Исландия
+          * `IN` - Индия
+          * `ID` - Индонезия
+          * `IR` - Иран
+          * `IQ` - Ирак
+          * `IE` - Ирландия
+          * `IM` - Остров Мэн
+          * `IL` - Израиль
+          * `IT` - Италия
+          * `JM` - Ямайка
+          * `JP` - Япония
+          * `JE` - Джерси
+          * `JO` - Иордания
+          * `KZ` - Казахстан
+          * `KE` - Кения
+          * `KI` - Кирибати
+          * `KP` - Северная Корея
+          * `KR` - Южная Корея
+          * `KW` - Кувейт
+          * `KG` - Киргизия
+          * `LA` - Лаос
+          * `LV` - Латвия
+          * `LB` - Ливан
+          * `LS` - Лесото
+          * `LR` - Либерии
+          * `LY` - Ливия
+          * `LI` - Лихтенштейн
+          * `LT` - Литва
+          * `LU` - Люксембург
+          * `MO` - Макао
+          * `MG` - Мадагаскар
+          * `MW` - Малави
+          * `MY` - Малайзия
+          * `MV` - Мальдивы
+          * `ML` - Мали
+          * `MT` - Мальта
+          * `MH` - Маршалловы острова
+          * `MQ` - Мартиника
+          * `MR` - Мавритания
+          * `MU` - Маврикий
+          * `YT` - Майотта
+          * `MX` - Мексика
+          * `FM` - Micronesia
+          * `MD` - Молдова
+          * `MC` - Монако
+          * `MN` - Монголия
+          * `ME` - Черногория
+          * `MS` - Монтсеррат
+          * `MA` - Марокко
+          * `MZ` - Мозамбик
+          * `MM` - Мьянмы
+          * `NA` - Намибия
+          * `NR` - Науру
+          * `NP` - Непал
+          * `NL` - Нидерланды
+          * `NC` - Новой Каледонии
+          * `NZ` - Новая Зеландия
+          * `NI` - Никарагуа
+          * `NE` - Нигер
+          * `NG` - Нигерия
+          * `NU` - Ниуэ
+          * `NF` - Остров Норфолк
+          * `MK` - Северная Македония
+          * `MP` - Северные Марианские острова
+          * `NO` - Норвегия
+          * `OM` - Оман
+          * `PK` - Пакистан
+          * `PW` - Палау
+          * `PS` - Палестина, Государство
+          * `PA` - Панама
+          * `PG` - Папуа-Новая Гвинея
+          * `PY` - Парагвай
+          * `PE` - Перу
+          * `PH` - Филиппины
+          * `PN` - Питкэрн
+          * `PL` - Польша
+          * `PT` - Португалия
+          * `PR` - Пуэрто-Рико
+          * `QA` - Катар
+          * `RE` - Реюньон
+          * `RO` - Румыния
+          * `RU` - Россия
+          * `RW` - Руанда
+          * `BL` - Сен-Бартельми
+          * `SH` - Святой Елены, Вознесения и Тристан-да-Кунья (Острова)
+          * `KN` - Сент-Китс и Невис
+          * `LC` - Сент-Люсия
+          * `MF` - Святого Мартина (Остров, французская часть)
+          * `PM` - Сен-Пьер и Микелон
+          * `VC` - Сент-Винсент и Гренадины
+          * `WS` - Самоа
+          * `SM` - Сан - Марино
+          * `ST` - Сан-Томе и Принсипи
+          * `SA` - Саудовская Аравия
+          * `SN` - Сенегал
+          * `RS` - Сербия
+          * `SC` - Сейшельские острова
+          * `SL` - Сьерра-Леоне
+          * `SG` - Сингапур
+          * `SX` - Святого Мартина (Остров, нидерландская часть)
+          * `SK` - Словакия
+          * `SI` - Словения
+          * `SB` - Соломоновы Острова
+          * `SO` - Сомали
+          * `ZA` - Южная Африка
+          * `GS` - Южная Георгия и Южные Сандвичевы острова
+          * `SS` - Южный Судан
+          * `ES` - Испания
+          * `LK` - Шри-Ланка
+          * `SD` - Судан
+          * `SR` - Суринам
+          * `SJ` - Шпицберген и Ян-Майен
+          * `SE` - Швеция
+          * `CH` - Швейцария
+          * `SY` - Сирия
+          * `TW` - Тайвань
+          * `TJ` - Таджикистан
+          * `TZ` - Танзания
+          * `TH` - Таиланд
+          * `TL` - Тимор-Лесте
+          * `TG` - Того
+          * `TK` - Токелау
+          * `TO` - Тонга
+          * `TT` - Тринидад и Тобаго
+          * `TN` - Тунис
+          * `TR` - Турция
+          * `TM` - Туркменистан
+          * `TC` - Острова Теркс и Кайкос
+          * `TV` - Тувалу
+          * `UG` - Уганда
+          * `UA` - Украина
+          * `AE` - Объединенные Арабские Эмираты
+          * `GB` - Великобритания
+          * `UM` - Внешние малые острова США
+          * `US` - США
+          * `UY` - Уругвай
+          * `UZ` - Узбекистан
+          * `VU` - Вануату
+          * `VE` - Венесуэла
+          * `VN` - Вьетнам
+          * `VG` - Виргинские Острова (Британские)
+          * `VI` - Виргинские Острова (США)
+          * `WF` - Уоллис и Футуна
+          * `EH` - Западная Сахара
+          * `YE` - Йемен
+          * `ZM` - Замбия
+          * `ZW` - Зимбабве
+          * `XK` - Косово
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: proxy_category
+        schema:
+          type: string
+          enum:
+          - datacenter_dedicated
+          - datacenter_shared
+          - lte
+          - residential_rotating
+          - residential_static
+        description: |-
+          Proxy's category
+
+          * `lte` - LTE
+          * `residential_static` - Residential Static
+          * `residential_rotating` - Residential Rotating
+          * `datacenter_dedicated` - Datacenter Dedicated
+          * `datacenter_shared` - Datacenter Shared
+      - in: query
+        name: stock_status
+        schema:
+          type: string
+          enum:
+          - in_stock
+          - out_of_stock
+        description: |-
+          Stock status
+
+          * `in_stock` - in_stock
+          * `out_of_stock` - out_of_stock
+      tags:
+      - proxy
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedProxyShopList'
+          description: ''
+  /api/v1/proxies/shop/buy_proxies/:
+    post:
+      operationId: apiV1ProxiesShopBuyProxiesCreate
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - proxy
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/PurchaseRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/PurchaseRequest'
+          multipart/form-data:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/PurchaseRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPurchaseList'
+          description: ''
+  /api/v1/proxies/history/:
+    get:
+      operationId: apiV1ProxiesHistoryList
+      parameters:
+      - in: query
+        name: access_type
+        schema:
+          type: string
+          enum:
+          - private
+          - shared
+        description: |-
+          Proxy's access type
+
+          * `shared` - Shared
+          * `private` - Private
+      - in: query
+        name: category
+        schema:
+          type: string
+          enum:
+          - datacenter_dedicated
+          - datacenter_shared
+          - lte
+          - residential_rotating
+          - residential_static
+        description: |-
+          Proxy's category
+
+          * `lte` - LTE
+          * `residential_static` - Residential Static
+          * `residential_rotating` - Residential Rotating
+          * `datacenter_dedicated` - Datacenter Dedicated
+          * `datacenter_shared` - Datacenter Shared
+      - in: query
+        name: expired
+        schema:
+          type: boolean
+      - in: query
+        name: ids
+        schema:
+          type: array
+          items:
+            type: string
+        description: Несколько значений могут быть разделены запятыми.
+        explode: false
+        style: form
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - proxy
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedProxyHistoryList'
+          description: ''
+  /api/v1/proxies/history/{id}/:
+    patch:
+      operationId: apiV1ProxiesHistoryPartialUpdate
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this user proxy server.
+        required: true
+      tags:
+      - proxy
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedProxyHistoryRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedProxyHistoryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedProxyHistoryRequest'
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProxyHistory'
+          description: ''
+  /api/v1/proxies/history/{id}/change-fingerprint/:
+    post:
+      operationId: apiV1ProxiesHistoryChangeFingerprintCreate
+      description: Изменяет отпечаток браузера для указанного прокси-сервера
+      summary: Изменить отпечаток браузера прокси
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this user proxy server.
+        required: true
+      tags:
+      - proxy
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeFingerprintRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ChangeFingerprintRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ChangeFingerprintRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeFingerprintResponse'
+          description: ''
+  /api/v1/proxies/rotating-credentials/:
+    post:
+      operationId: apiV1ProxiesRotatingCredentialsCreate
+      description: Generate credentials for rotating residential proxies.
+      tags:
+      - proxy
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateCredentialsRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/GenerateCredentialsRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/GenerateCredentialsRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateCredentialsResponse'
+          description: ''
+  /api/v1/proxies/proxy-credentials/:
+    get:
+      operationId: apiV1ProxiesProxyCredentialsList
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: protocol
+        schema:
+          type: string
+          enum:
+          - http
+          - socks5
+        description: 'Опционально: протокол подключения'
+      - in: query
+        name: type_format
+        schema:
+          type: string
+          enum:
+          - full_url
+          - ip_port_user_pass
+          - user_pass_at_ip_port
+        description: Формат строки подключения
+        required: true
+      tags:
+      - proxy
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUserProxyServerCredentialsList'
+          description: ''
+  /api/v1/proxies/proxy-credentials/download/:
+    get:
+      operationId: apiV1ProxiesProxyCredentialsDownloadRetrieve
+      parameters:
+      - in: query
+        name: page
+        schema:
+          type: integer
+        description: Номер страницы (для пагинации)
+      - in: query
+        name: page_size
+        schema:
+          type: integer
+        description: Количество элементов на странице (по умолчанию 100)
+      - in: query
+        name: protocol
+        schema:
+          type: string
+          enum:
+          - http
+          - socks5
+        description: 'Опционально: протокол подключения'
+      - in: query
+        name: type_format
+        schema:
+          type: string
+          enum:
+          - full_url
+          - ip_port_user_pass
+          - user_pass_at_ip_port
+        description: Формат строки подключения
+      tags:
+      - proxy
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                content:
+                  text/plain: {}
+                description: Файл с прокси в формате .txt
+          description: ''
+  /api/v1/proxies/user-proxy-server/reboot/:
+    post:
+      operationId: proxyModemReboot
+      description: 'Перезапуск модема ProxySmart. Ограничение: не чаще 1 раза в 5
+        минут на пользователя.'
+      summary: Перезапустить сервер
+      tags:
+      - proxy
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                  description: ID прокси-сервера
+              required:
+              - id
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Модем успешно перезапущен
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                description: Неверные параметры
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                description: Доступ запрещен
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                description: Прокси не найден или IMEI отсутствует
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                description: Превышен лимит частоты (не чаще 1 раза в 5 минут)
+          description: ''
+        '500':
+          content:
+            application/json:
+              schema:
+                description: Ошибка при перезапуске модема
+          description: ''
+  /api/v1/checkers/socks/:
+    get:
+      operationId: apiV1CheckersSocksList
+      description: A simple ViewSet for viewing socks.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - checkers
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSocksROList'
+          description: ''
+    post:
+      operationId: apiV1CheckersSocksCreate
+      description: A simple ViewSet for viewing socks.
+      tags:
+      - checkers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SocksRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SocksRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SocksRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Socks'
+          description: ''
+  /api/v1/checkers/socks/{id}/:
+    get:
+      operationId: apiV1CheckersSocksRetrieve
+      description: A simple ViewSet for viewing socks.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this Audit Order.
+        required: true
+      tags:
+      - checkers
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocksRO'
+          description: ''
+  /api/v1/checkers/ccard/:
+    get:
+      operationId: apiV1CheckersCcardList
+      description: A simple ViewSet for viewing socks.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - checkers
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCreditCardROList'
+          description: ''
+    post:
+      operationId: apiV1CheckersCcardCreate
+      description: A simple ViewSet for viewing socks.
+      tags:
+      - checkers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditCardCheckerRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CreditCardCheckerRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CreditCardCheckerRequest'
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditCardChecker'
+          description: ''
+  /api/v1/checkers/ccard/{id}/:
+    get:
+      operationId: apiV1CheckersCcardRetrieve
+      description: A simple ViewSet for viewing socks.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this Audit Order.
+        required: true
+      tags:
+      - checkers
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditCardRO'
+          description: ''
+  /api/v1/checkers/history/:
+    get:
+      operationId: apiV1CheckersHistoryList
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CheckerHistory'
+          description: ''
+  /api/v1/checkers/phone/:
+    get:
+      operationId: apiV1CheckersPhoneList
+      description: A simple ViewSet for viewing socks.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - checkers
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPhoneROList'
+          description: ''
+    post:
+      operationId: apiV1CheckersPhoneCreate
+      description: A simple ViewSet for viewing socks.
+      tags:
+      - checkers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PhoneRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PhoneRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PhoneRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Phone'
+          description: ''
+  /api/v1/checkers/phone/{id}/:
+    get:
+      operationId: apiV1CheckersPhoneRetrieve
+      description: A simple ViewSet for viewing socks.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this Audit Order.
+        required: true
+      tags:
+      - checkers
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhoneRO'
+          description: ''
+  /api/v2/users/balance/:
+    get:
+      operationId: apiV2UsersBalanceRetrieve
+      tags:
+      - user
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          description: No response body
+components:
+  schemas:
+    BlankEnum:
+      enum:
+      - ''
+    ChangeFingerprintRequest:
+      type: object
+      properties:
+        value:
+          description: |-
+            Новое значение отпечатка браузера
+
+            * `` - ---
+            * `android:4` - Android 14
+            * `macosx:4` - MacOSX 12.6
+            * `ios:3` - Iphone 12 max
+            * `windows:1` - Win10 Server
+            * `windows:4` - Win10 Desktop
+          oneOf:
+          - $ref: '#/components/schemas/ValueEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+      required:
+      - value
+    ChangeFingerprintResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          description: Статус операции
+        message:
+          type: string
+          description: Сообщение об ошибке (если есть)
+        code:
+          type: string
+          description: Код ошибки (если есть)
+      required:
+      - status
+    CheckerHistory:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/StatusE95Enum'
+        product:
+          $ref: '#/components/schemas/ProductEnum'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          title: Создано
+      required:
+      - product
+    Country:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        slug:
+          type: string
+          maxLength: 50
+          pattern: ^[-a-zA-Z0-9_]+$
+        name:
+          type: string
+          maxLength: 100
+        code:
+          type: string
+          maxLength: 10
+        country:
+          $ref: '#/components/schemas/CountryEnum'
+        flag:
+          type: string
+          readOnly: true
+        unicode_flag:
+          type: string
+          readOnly: true
+      required:
+      - code
+      - country
+      - name
+    CountryEnum:
+      enum:
+      - AF
+      - AL
+      - DZ
+      - AD
+      - AO
+      - AI
+      - AQ
+      - AR
+      - AM
+      - AW
+      - AU
+      - AT
+      - AZ
+      - BH
+      - BD
+      - BB
+      - BY
+      - BE
+      - BZ
+      - BJ
+      - BT
+      - BO
+      - BW
+      - BR
+      - BN
+      - BG
+      - BI
+      - KH
+      - CM
+      - CA
+      - TD
+      - CL
+      - CN
+      - CO
+      - CG
+      - HR
+      - CU
+      - CW
+      - CY
+      - CZ
+      - DK
+      - DJ
+      - DM
+      - EC
+      - EG
+      - SV
+      - ER
+      - EE
+      - SZ
+      - ET
+      - FJ
+      - FI
+      - FR
+      - GA
+      - GM
+      - GE
+      - DE
+      - GH
+      - GI
+      - GR
+      - GL
+      - GD
+      - GP
+      - GU
+      - GT
+      - GG
+      - GN
+      - GY
+      - HT
+      - HN
+      - HK
+      - HU
+      - IS
+      - IN
+      - ID
+      - IR
+      - IQ
+      - IE
+      - IL
+      - IT
+      - JM
+      - JP
+      - JE
+      - JO
+      - KZ
+      - KE
+      - KI
+      - KW
+      - KG
+      - LA
+      - LV
+      - LB
+      - LS
+      - LR
+      - LY
+      - LI
+      - LT
+      - LU
+      - MO
+      - MG
+      - MW
+      - MY
+      - MV
+      - ML
+      - MT
+      - MQ
+      - MR
+      - MU
+      - YT
+      - MX
+      - MD
+      - MC
+      - MN
+      - ME
+      - MS
+      - MA
+      - MZ
+      - MM
+      - NA
+      - NR
+      - NP
+      - NL
+      - NI
+      - NE
+      - NG
+      - NU
+      - 'NO'
+      - OM
+      - PK
+      - PW
+      - PA
+      - PY
+      - PE
+      - PH
+      - PN
+      - PL
+      - PT
+      - QA
+      - RE
+      - RO
+      - RU
+      - RW
+      - WS
+      - SN
+      - RS
+      - SG
+      - SK
+      - SI
+      - SO
+      - ES
+      - SD
+      - SR
+      - SE
+      - CH
+      - SY
+      - TW
+      - TJ
+      - TZ
+      - TH
+      - TG
+      - TK
+      - TO
+      - TN
+      - TR
+      - TM
+      - TV
+      - UG
+      - UA
+      - GB
+      - US
+      - UY
+      - UZ
+      - VU
+      - VE
+      - VN
+      - YE
+      - ZM
+      - ZW
+      - XK
+      - AX
+      - AS
+      - BS
+      - BM
+      - BV
+      - KY
+      - CF
+      - CX
+      - KM
+      - CK
+      - DO
+      - GQ
+      - FO
+      - GF
+      - PF
+      - VA
+      - IM
+      - KP
+      - KR
+      - MH
+      - NC
+      - NZ
+      - NF
+      - MK
+      - SA
+      - SC
+      - SB
+      - ZA
+      - SS
+      - EH
+      - AG
+      - BA
+      - TF
+      - MP
+      - TT
+      - AE
+      - WF
+      - TC
+      - UM
+      - IO
+      - HM
+      - GS
+      - VG
+      - VI
+      - MF
+      - SX
+      - SJ
+      - CD
+      - FM
+      - CC
+      - FK
+      - SH
+      - SM
+      - PS
+      - BQ
+      - BF
+      - CV
+      - CR
+      - GW
+      - PR
+      - BL
+      - LC
+      - SL
+      - LK
+      - TL
+      - PG
+      - KN
+      - PM
+      - VC
+      - ST
+      - CI
+      type: string
+      description: |-
+        * `AF` - Афганистан
+        * `AL` - Албания
+        * `DZ` - Алжир
+        * `AD` - Андорра
+        * `AO` - Ангола
+        * `AI` - Ангилья
+        * `AQ` - Антарктида
+        * `AR` - Аргентина
+        * `AM` - Армения
+        * `AW` - Аруба
+        * `AU` - Австралия
+        * `AT` - Австрия
+        * `AZ` - Азербайджан
+        * `BH` - Бахрейн
+        * `BD` - Бангладеш
+        * `BB` - Барбадос
+        * `BY` - Беларусь
+        * `BE` - Бельгия
+        * `BZ` - Белиз
+        * `BJ` - Бенин
+        * `BT` - Бутан
+        * `BO` - Боливия
+        * `BW` - Ботсвана
+        * `BR` - Бразилия
+        * `BN` - Бруней
+        * `BG` - Болгария
+        * `BI` - Бурунди
+        * `KH` - Камбоджа
+        * `CM` - Камерун
+        * `CA` - Канада
+        * `TD` - Чад
+        * `CL` - Чили
+        * `CN` - Китай
+        * `CO` - Колумбия
+        * `CG` - Конго
+        * `HR` - Хорватия
+        * `CU` - Куба
+        * `CW` - Кюрасао
+        * `CY` - Кипр
+        * `CZ` - Чехия
+        * `DK` - Дания
+        * `DJ` - Джибути
+        * `DM` - Доминика
+        * `EC` - Эквадор
+        * `EG` - Египет
+        * `SV` - Сальвадор
+        * `ER` - Эритрея
+        * `EE` - Эстония
+        * `SZ` - Эсватини
+        * `ET` - Эфиопия
+        * `FJ` - Фиджи
+        * `FI` - Финляндия
+        * `FR` - Франция
+        * `GA` - Габон
+        * `GM` - Гамбия
+        * `GE` - Грузия
+        * `DE` - Германия
+        * `GH` - Гана
+        * `GI` - Гибралтар
+        * `GR` - Греция
+        * `GL` - Гренландия
+        * `GD` - Гренада
+        * `GP` - Гваделупа
+        * `GU` - Гуам
+        * `GT` - Гватемала
+        * `GG` - Гернси
+        * `GN` - Гвинея
+        * `GY` - Гайана
+        * `HT` - Гаити
+        * `HN` - Гондурас
+        * `HK` - Гонконг
+        * `HU` - Венгрия
+        * `IS` - Исландия
+        * `IN` - Индия
+        * `ID` - Индонезия
+        * `IR` - Иран
+        * `IQ` - Ирак
+        * `IE` - Ирландия
+        * `IL` - Израиль
+        * `IT` - Италия
+        * `JM` - Ямайка
+        * `JP` - Япония
+        * `JE` - Джерси
+        * `JO` - Иордания
+        * `KZ` - Казахстан
+        * `KE` - Кения
+        * `KI` - Кирибати
+        * `KW` - Кувейт
+        * `KG` - Киргизия
+        * `LA` - Лаос
+        * `LV` - Латвия
+        * `LB` - Ливан
+        * `LS` - Лесото
+        * `LR` - Либерии
+        * `LY` - Ливия
+        * `LI` - Лихтенштейн
+        * `LT` - Литва
+        * `LU` - Люксембург
+        * `MO` - Макао
+        * `MG` - Мадагаскар
+        * `MW` - Малави
+        * `MY` - Малайзия
+        * `MV` - Мальдивы
+        * `ML` - Мали
+        * `MT` - Мальта
+        * `MQ` - Мартиника
+        * `MR` - Мавритания
+        * `MU` - Маврикий
+        * `YT` - Майотта
+        * `MX` - Мексика
+        * `MD` - Молдова
+        * `MC` - Монако
+        * `MN` - Монголия
+        * `ME` - Черногория
+        * `MS` - Монтсеррат
+        * `MA` - Марокко
+        * `MZ` - Мозамбик
+        * `MM` - Мьянмы
+        * `NA` - Намибия
+        * `NR` - Науру
+        * `NP` - Непал
+        * `NL` - Нидерланды
+        * `NI` - Никарагуа
+        * `NE` - Нигер
+        * `NG` - Нигерия
+        * `NU` - Ниуэ
+        * `NO` - Норвегия
+        * `OM` - Оман
+        * `PK` - Пакистан
+        * `PW` - Палау
+        * `PA` - Панама
+        * `PY` - Парагвай
+        * `PE` - Перу
+        * `PH` - Филиппины
+        * `PN` - Питкэрн
+        * `PL` - Польша
+        * `PT` - Португалия
+        * `QA` - Катар
+        * `RE` - Реюньон
+        * `RO` - Румыния
+        * `RU` - Россия
+        * `RW` - Руанда
+        * `WS` - Самоа
+        * `SN` - Сенегал
+        * `RS` - Сербия
+        * `SG` - Сингапур
+        * `SK` - Словакия
+        * `SI` - Словения
+        * `SO` - Сомали
+        * `ES` - Испания
+        * `SD` - Судан
+        * `SR` - Суринам
+        * `SE` - Швеция
+        * `CH` - Швейцария
+        * `SY` - Сирия
+        * `TW` - Тайвань
+        * `TJ` - Таджикистан
+        * `TZ` - Танзания
+        * `TH` - Таиланд
+        * `TG` - Того
+        * `TK` - Токелау
+        * `TO` - Тонга
+        * `TN` - Тунис
+        * `TR` - Турция
+        * `TM` - Туркменистан
+        * `TV` - Тувалу
+        * `UG` - Уганда
+        * `UA` - Украина
+        * `GB` - Великобритания
+        * `US` - США
+        * `UY` - Уругвай
+        * `UZ` - Узбекистан
+        * `VU` - Вануату
+        * `VE` - Венесуэла
+        * `VN` - Вьетнам
+        * `YE` - Йемен
+        * `ZM` - Замбия
+        * `ZW` - Зимбабве
+        * `XK` - Косово
+        * `AX` - Аландские острова
+        * `AS` - Американское Самоа
+        * `BS` - Багамские острова
+        * `BM` - Бермудские острова
+        * `BV` - Остров Буве
+        * `KY` - Каймановы острова
+        * `CF` - Центральноафриканская Республика
+        * `CX` - Остров Рождества
+        * `KM` - Коморские острова
+        * `CK` - Острова Кука
+        * `DO` - Доминиканская Республика
+        * `GQ` - Экваториальная Гвинея
+        * `FO` - Фарерские острова
+        * `GF` - Французская Гвиана
+        * `PF` - Французская Полинезия
+        * `VA` - Святой Престол
+        * `IM` - Остров Мэн
+        * `KP` - Северная Корея
+        * `KR` - Южная Корея
+        * `MH` - Маршалловы острова
+        * `NC` - Новой Каледонии
+        * `NZ` - Новая Зеландия
+        * `NF` - Остров Норфолк
+        * `MK` - Северная Македония
+        * `SA` - Саудовская Аравия
+        * `SC` - Сейшельские острова
+        * `SB` - Соломоновы Острова
+        * `ZA` - Южная Африка
+        * `SS` - Южный Судан
+        * `EH` - Западная Сахара
+        * `AG` - Антигуа и Барбуда
+        * `BA` - Босния и Герцеговина
+        * `TF` - Французские южные территории
+        * `MP` - Северные Марианские острова
+        * `TT` - Тринидад и Тобаго
+        * `AE` - Объединенные Арабские Эмираты
+        * `WF` - Уоллис и Футуна
+        * `TC` - Острова Теркс и Кайкос
+        * `UM` - Внешние малые острова США
+        * `IO` - Британская территория в Индийском океане
+        * `HM` - Остров Херд и Острова Макдоналд
+        * `GS` - Южная Георгия и Южные Сандвичевы острова
+        * `VG` - Виргинские Острова (Британские)
+        * `VI` - Виргинские Острова (США)
+        * `MF` - Святого Мартина (Остров, французская часть)
+        * `SX` - Святого Мартина (Остров, нидерландская часть)
+        * `SJ` - Шпицберген и Ян-Майен
+        * `CD` - Конго (Демократическая Республика)
+        * `FM` - Микронезия (Федеративные Штаты)
+        * `CC` - Кокосовые (Килинг) острова
+        * `FK` - Фолклендские (Мальвинские) острова
+        * `SH` - Святой Елены, Вознесения и Тристан-да-Кунья (Острова)
+        * `SM` - Сан - Марино
+        * `PS` - Палестина, Государство
+        * `BQ` - Бонайре, Синт-Эстатиус и Саба
+        * `BF` - Буркина-Фасо
+        * `CV` - Кабо-Верде
+        * `CR` - Коста-Рика
+        * `GW` - Гвинея-Бисау
+        * `PR` - Пуэрто-Рико
+        * `BL` - Сен-Бартельми
+        * `LC` - Сент-Люсия
+        * `SL` - Сьерра-Леоне
+        * `LK` - Шри-Ланка
+        * `TL` - Тимор-Лесте
+        * `PG` - Папуа-Новая Гвинея
+        * `KN` - Сент-Китс и Невис
+        * `PM` - Сен-Пьер и Микелон
+        * `VC` - Сент-Винсент и Гренадины
+        * `ST` - Сан-Томе и Принсипи
+        * `CI` - Кот-д'Ивуар
+    CreditCardChecker:
+      type: object
+      properties:
+        user_language:
+          type: string
+        user_agent:
+          type: string
+        user_ip:
+          type: string
+          title: User IP address
+        billing_first_name:
+          type: string
+          title: First Name
+        billing_last_name:
+          type: string
+          title: Last Name
+        billing_company:
+          type: string
+          title: Company
+        billing_country:
+          type: string
+          title: Country
+          description: 'Country name or billing country ISO-Alpha2. (EG: United States
+            or US)'
+        billing_address_1:
+          type: string
+          title: Street Address part 1
+        billing_address_2:
+          type: string
+          title: Street Address part 2
+        billing_city:
+          type: string
+          title: City
+        billing_state:
+          type: string
+          title: Region or State
+        billing_zipcode:
+          type: string
+          title: Postcode or Zipcode
+        billing_phone:
+          type: string
+          title: Phone
+        billing_email:
+          type: string
+          title: Email
+        shipping_first_name:
+          type: string
+          title: First Name
+        shipping_last_name:
+          type: string
+          title: Last Name
+        shipping_company:
+          type: string
+          title: Company
+        shipping_country:
+          type: string
+          title: Country
+        shipping_address_1:
+          type: string
+          title: Street Address part 1
+        shipping_address_2:
+          type: string
+          title: Street Address part 2
+        shipping_city:
+          type: string
+          title: City
+        shipping_state:
+          type: string
+          title: Region or State
+        shipping_zipcode:
+          type: string
+          title: Postcode or Zipcode
+        shipping_phone:
+          type: string
+          title: Phone
+        shipping_email:
+          type: string
+          title: Email
+        username:
+          type: string
+        password_hash:
+          type: string
+          title: Password SHA256 hash
+        credit_card_bin:
+          type: string
+          title: First six digits of the credit or debit card
+          description: First six digits of the credit or debit card, referred to ask
+            the Bank Identification Number.
+        credit_card_number:
+          type: string
+        credit_card_expiration_month:
+          type: string
+          title: Exp. month
+        credit_card_expiration_year:
+          type: string
+          title: Exp. year
+        avs_code:
+          type: string
+          title: AVS response code
+        cvv_code:
+          type: string
+          title: CVV response code
+        order_amount:
+          type: string
+        order_quantity:
+          type: string
+        recurring:
+          type: boolean
+          title: Is this a recurring order that automatically rebills?
+        recurring_times:
+          type: integer
+        is_expert_check:
+          type: boolean
+    CreditCardCheckerRequest:
+      type: object
+      properties:
+        user_language:
+          type: string
+          minLength: 1
+        user_agent:
+          type: string
+          minLength: 1
+        user_ip:
+          type: string
+          minLength: 1
+          title: User IP address
+        billing_first_name:
+          type: string
+          minLength: 1
+          title: First Name
+        billing_last_name:
+          type: string
+          minLength: 1
+          title: Last Name
+        billing_company:
+          type: string
+          minLength: 1
+          title: Company
+        billing_country:
+          type: string
+          minLength: 1
+          title: Country
+          description: 'Country name or billing country ISO-Alpha2. (EG: United States
+            or US)'
+        billing_address_1:
+          type: string
+          minLength: 1
+          title: Street Address part 1
+        billing_address_2:
+          type: string
+          minLength: 1
+          title: Street Address part 2
+        billing_city:
+          type: string
+          minLength: 1
+          title: City
+        billing_state:
+          type: string
+          minLength: 1
+          title: Region or State
+        billing_zipcode:
+          type: string
+          minLength: 1
+          title: Postcode or Zipcode
+        billing_phone:
+          type: string
+          minLength: 1
+          title: Phone
+        billing_email:
+          type: string
+          minLength: 1
+          title: Email
+        shipping_first_name:
+          type: string
+          minLength: 1
+          title: First Name
+        shipping_last_name:
+          type: string
+          minLength: 1
+          title: Last Name
+        shipping_company:
+          type: string
+          minLength: 1
+          title: Company
+        shipping_country:
+          type: string
+          minLength: 1
+          title: Country
+        shipping_address_1:
+          type: string
+          minLength: 1
+          title: Street Address part 1
+        shipping_address_2:
+          type: string
+          minLength: 1
+          title: Street Address part 2
+        shipping_city:
+          type: string
+          minLength: 1
+          title: City
+        shipping_state:
+          type: string
+          minLength: 1
+          title: Region or State
+        shipping_zipcode:
+          type: string
+          minLength: 1
+          title: Postcode or Zipcode
+        shipping_phone:
+          type: string
+          minLength: 1
+          title: Phone
+        shipping_email:
+          type: string
+          minLength: 1
+          title: Email
+        username:
+          type: string
+          minLength: 1
+        password_hash:
+          type: string
+          minLength: 1
+          title: Password SHA256 hash
+        credit_card_bin:
+          type: string
+          minLength: 1
+          title: First six digits of the credit or debit card
+          description: First six digits of the credit or debit card, referred to ask
+            the Bank Identification Number.
+        credit_card_number:
+          type: string
+          minLength: 1
+        credit_card_expiration_month:
+          type: string
+          minLength: 1
+          title: Exp. month
+        credit_card_expiration_year:
+          type: string
+          minLength: 1
+          title: Exp. year
+        avs_code:
+          type: string
+          minLength: 1
+          title: AVS response code
+        cvv_code:
+          type: string
+          minLength: 1
+          title: CVV response code
+        order_amount:
+          type: string
+          minLength: 1
+        order_quantity:
+          type: string
+          minLength: 1
+        recurring:
+          type: boolean
+          title: Is this a recurring order that automatically rebills?
+        recurring_times:
+          type: integer
+        is_expert_check:
+          type: boolean
+    CreditCardRO:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/StatusE95Enum'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          title: Создано
+        report:
+          type: string
+          readOnly: true
+    GenerateCredentialsRequest:
+      type: object
+      properties:
+        connection_login:
+          type: string
+          minLength: 1
+        connection_password:
+          type: string
+          minLength: 1
+        connection_host:
+          type: string
+          minLength: 1
+        connection_port:
+          type: integer
+        session_type:
+          $ref: '#/components/schemas/SessionTypeEnum'
+        country_code:
+          type: string
+          nullable: true
+        region:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        amount:
+          type: integer
+      required:
+      - connection_host
+      - connection_login
+      - connection_password
+      - connection_port
+      - session_type
+    GenerateCredentialsResponse:
+      type: object
+      properties:
+        credentials:
+          type: array
+          items: {}
+      required:
+      - credentials
+    MarkupPercentEnum:
+      enum:
+      - 0
+      - 50
+      - 100
+      - 200
+      - 300
+      - 400
+      - 500
+      - 1000
+      - 2000
+      type: integer
+      description: |-
+        * `0` - 0
+        * `50` - 50
+        * `100` - 100
+        * `200` - 200
+        * `300` - 300
+        * `400` - 400
+        * `500` - 500
+        * `1000` - 1000
+        * `2000` - 2000
+    NumbersCreate:
+      type: object
+      properties:
+        provider:
+          $ref: '#/components/schemas/ProviderEnum'
+        service_code:
+          type: string
+          maxLength: 100
+        country_code:
+          type: string
+          maxLength: 10
+        period:
+          type: string
+        need_fraud_score:
+          type: boolean
+          default: false
+        markup_percent:
+          allOf:
+          - $ref: '#/components/schemas/MarkupPercentEnum'
+          default: 0
+          description: |-
+            Наценка в процентах (0/50/100/200/300/400/500/1000/2000). По умолчанию 0.
+
+            * `0` - 0
+            * `50` - 50
+            * `100` - 100
+            * `200` - 200
+            * `300` - 300
+            * `400` - 400
+            * `500` - 500
+            * `1000` - 1000
+            * `2000` - 2000
+        promo_code:
+          type: string
+          description: Оповещения об оплате телефонных номеров
+          maxLength: 64
+      required:
+      - country_code
+      - period
+      - provider
+      - service_code
+    NumbersCreateRequest:
+      type: object
+      properties:
+        provider:
+          $ref: '#/components/schemas/ProviderEnum'
+        service_code:
+          type: string
+          minLength: 1
+          maxLength: 100
+        country_code:
+          type: string
+          minLength: 1
+          maxLength: 10
+        period:
+          type: string
+          minLength: 1
+        need_fraud_score:
+          type: boolean
+          default: false
+        markup_percent:
+          allOf:
+          - $ref: '#/components/schemas/MarkupPercentEnum'
+          default: 0
+          description: |-
+            Наценка в процентах (0/50/100/200/300/400/500/1000/2000). По умолчанию 0.
+
+            * `0` - 0
+            * `50` - 50
+            * `100` - 100
+            * `200` - 200
+            * `300` - 300
+            * `400` - 400
+            * `500` - 500
+            * `1000` - 1000
+            * `2000` - 2000
+        promo_code:
+          type: string
+          description: Оповещения об оплате телефонных номеров
+          maxLength: 64
+      required:
+      - country_code
+      - period
+      - provider
+      - service_code
+    PaginatedCreditCardROList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreditCardRO'
+    PaginatedPhoneROList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PhoneRO'
+    PaginatedProxyHistoryList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProxyHistory'
+    PaginatedProxyShopList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProxyShop'
+    PaginatedPurchaseList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Purchase'
+    PaginatedServiceCommonList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceCommon'
+    PaginatedSocksROList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SocksRO'
+    PaginatedUserProxyServerCredentialsList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserProxyServerCredentials'
+    PatchedProxyHistoryRequest:
+      type: object
+      properties:
+        auto_renew_request:
+          type: boolean
+          description: Запрос на включение/отключение автопродления
+    Phone:
+      type: object
+      properties:
+        value:
+          type: string
+      required:
+      - value
+    PhoneNumberOrderAPI:
+      type: object
+      properties:
+        id:
+          type: string
+          readOnly: true
+        pk:
+          type: string
+          format: uuid
+          title: Id
+        status:
+          $ref: '#/components/schemas/PhoneNumberOrderAPIStatusEnum'
+        provider:
+          $ref: '#/components/schemas/ProviderEnum'
+        price_usd:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,18}(?:\.\d{0,2})?$
+          title: Price in USD
+        service_code:
+          allOf:
+          - $ref: '#/components/schemas/ServiceLight'
+          readOnly: true
+        phone_number:
+          type: string
+          readOnly: true
+        country_code:
+          allOf:
+          - $ref: '#/components/schemas/Country'
+          readOnly: true
+        expiration_time:
+          type: string
+          format: date-time
+          nullable: true
+          title: Время когда истечет номер
+        report:
+          type: string
+          format: uuid
+          nullable: true
+        history_sms_code:
+          type: string
+          readOnly: true
+        can_replay:
+          type: string
+          readOnly: true
+        can_extend:
+          type: boolean
+          description: Возможность сделать продление
+        can_cancel:
+          type: string
+          readOnly: true
+    PhoneNumberOrderAPIStatusEnum:
+      enum:
+      - new
+      - processing
+      - waiting
+      - success
+      - calculation
+      - canceled
+      - refund
+      - failed
+      - not_sms_code
+      type: string
+      description: |-
+        * `new` - Just created. Not yet processed.
+        * `processing` - Waiting Write off from the account in the service
+        * `waiting` - The data has been updated and is awaiting sms
+        * `success` - Successful texting
+        * `calculation` - Сalculations
+        * `canceled` - Canceled
+        * `refund` - Refund
+        * `failed` - Failed
+        * `not_sms_code` - I never got the text message.
+    PhoneRO:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/StatusE95Enum'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          title: Создано
+        report:
+          type: string
+          readOnly: true
+    PhoneRequest:
+      type: object
+      properties:
+        value:
+          type: string
+          minLength: 1
+      required:
+      - value
+    ProductEnum:
+      enum:
+      - socks
+      - mymail
+      - mymobile
+      - mydns
+      - bigbrother
+      - creditcardchecker
+      - checkerbyvektort13
+      - socialratefinder
+      type: string
+      description: |-
+        * `socks` - IP Address Report
+        * `mymail` - My Mail Report
+        * `mymobile` - Phone Number Report
+        * `mydns` - My DNS Report
+        * `bigbrother` - Argus Report
+        * `creditcardchecker` - Bank Card Report
+        * `checkerbyvektort13` - Checker by VektorT13 Report
+        * `socialratefinder` - Social Rate Finder Report
+    ProviderEnum:
+      enum:
+      - none
+      - virtual
+      - virtual_rent
+      - residential
+      - residential_rent
+      type: string
+      description: |-
+        * `none` - Default provider
+        * `virtual` - SMS Virtual
+        * `virtual_rent` - SMS Virtual Rent
+        * `residential` - SMS Residential
+        * `residential_rent` - SMS Residential Rent
+    ProxyCategoryEnum:
+      enum:
+      - lte
+      - residential_static
+      - residential_rotating
+      - datacenter_dedicated
+      - datacenter_shared
+      type: string
+      description: |-
+        * `lte` - LTE
+        * `residential_static` - Residential Static
+        * `residential_rotating` - Residential Rotating
+        * `datacenter_dedicated` - Datacenter Dedicated
+        * `datacenter_shared` - Datacenter Shared
+    ProxyHistory:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        url:
+          type: string
+          readOnly: true
+        connection_login:
+          type: string
+          readOnly: true
+          description: Логин, используемый для подключения к Proxy.
+        connection_password:
+          type: string
+          readOnly: true
+          description: Пароль, используемый для подключения к Proxy.
+        system_status:
+          allOf:
+          - $ref: '#/components/schemas/SystemStatusEnum'
+          readOnly: true
+        expired:
+          oneOf:
+          - type: string
+          - type: boolean
+          readOnly: true
+        access_starts_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: Дата/время начала доступа к Proxy.
+        access_expires_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: Дата/время окончания доступа к Proxy.
+        public_ipaddress:
+          type: string
+          readOnly: true
+        geoip:
+          type: string
+          readOnly: true
+        traffic_remains:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Сколько трафика осталось в байтах. "-1" должно значит, что
+            unlimited, но на деле предстоит проверить. Значение берется от провайдера
+            и поведение непредсказуемо.
+        change_ip_links:
+          type: string
+          readOnly: true
+        ovpn_config_link:
+          type: string
+          readOnly: true
+        auto_renew_request:
+          type: boolean
+          description: Запрос на включение/отключение автопродления
+        proxy_category:
+          type: string
+          readOnly: true
+        access_type:
+          type: string
+          readOnly: true
+        connection_host:
+          type: string
+          readOnly: true
+        connection_port:
+          type: string
+          readOnly: true
+        xray_settings_str:
+          type: string
+          readOnly: true
+    ProxyProduct:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          description: Название товара, отображаемое пользователю.
+          maxLength: 200
+        location_country_code:
+          type: string
+          readOnly: true
+        price_usd:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,18}(?:\.\d{0,2})?$
+          title: Price in USD
+        days:
+          type: integer
+          readOnly: true
+        proxy_category:
+          allOf:
+          - $ref: '#/components/schemas/ProxyCategoryEnum'
+          description: |-
+            Категория Proxy: LTE - мобильный шлюз.
+
+            * `lte` - LTE
+            * `residential_static` - Residential Static
+            * `residential_rotating` - Residential Rotating
+            * `datacenter_dedicated` - Datacenter Dedicated
+            * `datacenter_shared` - Datacenter Shared
+        stock_status:
+          $ref: '#/components/schemas/StockStatusEnum'
+        traffic_limitation:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          description: 'Размер трафика в МБ, включенного в тариф. Значение "-1" означает,
+            что огранчений нет. '
+        is_auto_renewal_possible:
+          type: boolean
+          readOnly: true
+      required:
+      - price_usd
+      - proxy_category
+      - title
+    ProxyShop:
+      type: object
+      properties:
+        proxy_products:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProxyProduct'
+          readOnly: true
+        title:
+          type: string
+          description: Заголовок группы, отображаемый на сайте.
+          maxLength: 255
+        proxy_category:
+          allOf:
+          - $ref: '#/components/schemas/ProxyCategoryEnum'
+          description: |-
+            Категория Proxy: LTE - мобильный шлюз.
+
+            * `lte` - LTE
+            * `residential_static` - Residential Static
+            * `residential_rotating` - Residential Rotating
+            * `datacenter_dedicated` - Datacenter Dedicated
+            * `datacenter_shared` - Datacenter Shared
+        location_country_code:
+          type: string
+          readOnly: true
+      required:
+      - title
+    Purchase:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        auto_renew:
+          type: boolean
+        status:
+          allOf:
+          - $ref: '#/components/schemas/PurchaseStatusEnum'
+          readOnly: true
+        message:
+          type: string
+          readOnly: true
+        promo_code:
+          type: string
+      required:
+      - auto_renew
+      - id
+    PurchaseRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        auto_renew:
+          type: boolean
+        promo_code:
+          type: string
+      required:
+      - auto_renew
+      - id
+    PurchaseStatusEnum:
+      enum:
+      - in_progress
+      - canceled
+      type: string
+      description: |-
+        * `in_progress` - in_progress
+        * `canceled` - Canceled
+    ServiceCommon:
+      type: object
+      description: |-
+        data.services: {
+        service_icon:
+        service_name:
+        service_slug:
+        is_bookmarked: boolean
+        url:
+
+        // Optional (only for pick)
+        country_code:
+        price
+        count
+        provider:
+        is_active
+        }
+      properties:
+        service_icon:
+          type: string
+          readOnly: true
+        service_name:
+          type: string
+          readOnly: true
+        service_code:
+          type: string
+          readOnly: true
+        service_slug:
+          type: string
+          readOnly: true
+        is_bookmark:
+          type: boolean
+          readOnly: true
+        url:
+          type: string
+          readOnly: true
+        should_show_modal:
+          type: string
+          readOnly: true
+        country_code:
+          type: string
+          readOnly: true
+        price:
+          type: string
+          readOnly: true
+        count:
+          type: string
+          readOnly: true
+        provider:
+          type: string
+          readOnly: true
+        period:
+          type: string
+          readOnly: true
+        is_active:
+          type: string
+          readOnly: true
+    ServiceLight:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        slug:
+          type: string
+          maxLength: 666
+          pattern: ^[-a-zA-Z0-9_]+$
+        code:
+          type: string
+          maxLength: 50
+        icon:
+          type: string
+          readOnly: true
+        is_active:
+          type: boolean
+        url:
+          type: string
+          readOnly: true
+        is_bookmark:
+          type: boolean
+          readOnly: true
+      required:
+      - code
+    SessionTypeEnum:
+      enum:
+      - random
+      - short_session
+      - long_session
+      type: string
+      description: |-
+        * `random` - random
+        * `short_session` - short_session
+        * `long_session` - long_session
+    Socks:
+      type: object
+      properties:
+        ips:
+          type: array
+          items:
+            type: string
+      required:
+      - ips
+    SocksRO:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          $ref: '#/components/schemas/StatusE95Enum'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          title: Создано
+        report:
+          type: string
+          readOnly: true
+      required:
+      - id
+    SocksRequest:
+      type: object
+      properties:
+        ips:
+          type: array
+          items:
+            type: string
+            minLength: 1
+      required:
+      - ips
+    StatusE95Enum:
+      enum:
+      - new
+      - ready_to_perform_audit
+      - processing
+      - completed
+      type: string
+      description: |-
+        * `new` - Just created. Not yet processed.
+        * `ready_to_perform_audit` - Ready to run audit
+        * `processing` - Waiting Report ...
+        * `completed` - Finished (success or failed, details in report)
+    StockStatusEnum:
+      enum:
+      - in_stock
+      - out_of_stock
+      type: string
+      description: |-
+        * `in_stock` - В наличии
+        * `out_of_stock` - Нет в продаже
+    SystemStatusEnum:
+      enum:
+      - active
+      - deleted
+      type: string
+      description: |-
+        * `active` - Active
+        * `deleted` - Deleted
+    UserProxyServerCredentials:
+      type: object
+      properties:
+        credentials:
+          type: array
+          items: {}
+      required:
+      - credentials
+    ValueEnum:
+      enum:
+      - android:4
+      - macosx:4
+      - ios:3
+      - windows:1
+      - windows:4
+      type: string
+      description: |-
+        * `` - ---
+        * `android:4` - Android 14
+        * `macosx:4` - MacOSX 12.6
+        * `ios:3` - Iphone 12 max
+        * `windows:1` - Win10 Server
+        * `windows:4` - Win10 Desktop
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: Use your API key to authenticate requests.
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT Authorization header using the Bearer scheme.
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

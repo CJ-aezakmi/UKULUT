@@ -1,0 +1,34 @@
+[package]
+name = "app"
+version = "2.0.0"
+description = "Antic Browser - Advanced Anti-Detect Browser"
+authors = ["CJ-aezakmi"]
+license = "MIT"
+repository = "https://github.com/CJ-aezakmi/UKULUT"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.5.3", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.9.5", features = [] }
+tauri-plugin-log = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-http = "2"
+reqwest = { version = "0.12", features = ["json", "blocking", "socks"] }
+tokio = { version = "1", features = ["full"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.10", features = ["v4", "serde"] }
+maxminddb = "0.24"
+anyhow = "1.0"
+thiserror = "2.0"
+rand = "0.8"
+base64 = "0.22"

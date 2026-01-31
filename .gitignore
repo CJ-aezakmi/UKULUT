@@ -1,0 +1,50 @@
+# .gitignore for Antic Browser
+
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build outputs
+/build
+/dist
+/target
+
+# Tauri
+/src-tauri/target
+/src-tauri/WixTools
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# User data
+profiles/
+cookies/
+
+# Playwright
+.playwright/
+playwright-report/
+test-results/
+
+# Temporary files
+*.tmp
+*.temp

@@ -1,0 +1,55 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "Antic Browser",
+  "version": "2.0.0",
+  "identifier": "com.anticbrowser.app",
+  "build": {
+    "frontendDist": "../build",
+    "devUrl": "http://localhost:3000",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Antic Browser 2.0",
+        "width": 1200,
+        "height": 800,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' https://api.sx.org https://my.sx.org https://app.cyberyozh.com http://ip-api.com https://ipapi.co https://github.com; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "publisher": "CJ-aezakmi",
+    "shortDescription": "Advanced Anti-Detect Browser",
+    "longDescription": "Antic Browser - Professional anti-detect browser with proxy management, profile configuration, and automation support.",
+    "windows": {
+      "wix": {
+        "language": ["en-US", "ru-RU"]
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/CJ-aezakmi/UKULUT/releases/latest/download/latest.json"
+      ],
+      "dialog": true,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJDQjY1MDNBMzc3RkVGRDEKUldUUjczODNPbEMyTExoMC93MmF0OXNLOXV0SmpoYlM4ODcvRlFBTjVFQ2VGZmE4YUwvZEJWeDgK"
+    }
+  }
+}
