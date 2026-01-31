@@ -1,0 +1,32 @@
+{
+  "name": "antic-browser-launcher",
+  "version": "1.0.0",
+  "description": "Auto-updater and dependency manager for Antic Browser",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "author": "CJ-aezakmi",
+  "license": "MIT",
+  "dependencies": {
+    "electron": "^28.0.0",
+    "axios": "^1.6.0",
+    "semver": "^7.5.4"
+  },
+  "devDependencies": {
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.anticbrowser.launcher",
+    "productName": "Antic Browser Launcher",
+    "win": {
+      "target": "nsis",
+      "icon": "icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}
