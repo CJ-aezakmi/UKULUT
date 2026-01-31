@@ -117,19 +117,7 @@ export default function ProfilesPage() {
         setFormData({ ...formData, user_agent: getRandomUserAgent() });
     };
 
-    const getCountryFlag = (countryCode: string): string => {
-        // Преобразуем код страны в emoji флаг
-        if (!countryCode || countryCode === 'Unknown') return '🏳️';
-        
-        const code = countryCode.toUpperCase();
-        if (code.length !== 2) return '🏳️';
-        
-        // Конвертируем буквы в региональные индикаторы
-        const codePoints = [...code].map(char => 127397 + char.charCodeAt(0));
-        return String.fromCodePoint(...codePoints);
-    };
-
-    const getProxyInfo = (proxyStr: string | null) => {
+    const getProxyInfo = (proxyStr: string | null | undefined) => {
         if (!proxyStr) return null;
         
         const proxy = proxies.find(p => p.proxy_str === proxyStr);
