@@ -109,8 +109,8 @@ export default function CyberYozhModal({ isOpen, onClose, onProxiesImported }: C
             
             const data = await api.cyberyozhGetShopProxies(
                 apiKey,
-                null,
-                null
+                undefined,
+                undefined
             );
             
             console.log('[CyberYozh] RAW DATA from Rust:', JSON.stringify(data.slice(0, 2), null, 2));
