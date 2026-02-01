@@ -5,6 +5,9 @@ use crate::storage::Storage;
 use std::sync::Arc;
 use tauri::State;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
 // ============================================================================
 // PROFILE COMMANDS
 // ============================================================================
