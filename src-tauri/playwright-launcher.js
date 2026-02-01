@@ -436,15 +436,23 @@ async function launchBrowser() {
             try {
                 await saveCookies(context, config.profileName);
             } catch (e) {
-                console.error('Error saving cookies on close:', e);
+                console.error('Failed to save cookies:', e);
             }
+            process.exit(0);
         });
 
-        // Ожидаем закрытия браузера
-        await page.waitForEvent('close').catch(() => {});
-        await context.close();
-        await browser.close();
-        process.exit(0);
+        // Держим процесс живым - НЕ выходим пока браузер не закроется
+        // Ждем события закрытия браузера
+        browser.on('disconnected', () => {
+            console.log('Browser disconnected');
+            clearInterval(saveInterval);
+            process.exit(0);
+        });
+
+        // Бесконечный цикл для поддержания процесса
+        await new Promise(() => {
+            // Никогда не резолвится - процесс живет пока браузер открыт
+        });
 
     } catch (error) {
         console.error('Failed to launch browser:', error);
