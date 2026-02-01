@@ -1,6 +1,6 @@
 {
   "name": "anticbrowser-tauri",
-  "version": "2.0.8",
+  "version": "2.0.9",
   "description": "Antic Browser - Advanced Anti-Detect Browser with Proxy Management",
   "type": "module",
   "scripts": {
@@ -9,14 +9,20 @@
     "preview": "vite preview",
     "tauri": "tauri"
   },
-  "keywords": ["antidetect", "browser", "proxy", "automation", "playwright"],
+  "keywords": [
+    "antidetect",
+    "browser",
+    "proxy",
+    "automation",
+    "playwright"
+  ],
   "author": "Antic Browser Inc.",
   "license": "MIT",
   "dependencies": {
     "@tauri-apps/api": "2.2.0",
     "@tauri-apps/plugin-http": "^2.5.6",
     "@tauri-apps/plugin-shell": "^2.3.4",
-    "playwright": "^1.49.0",
+    "playwright": "^1.58.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

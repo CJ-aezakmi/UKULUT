@@ -15,8 +15,8 @@ export default function ProfilesPage() {
     const emptyProfile: Profile = {
         name: '',
         user_agent: getRandomUserAgent(),
-        screen_width: 1920,
-        screen_height: 1080,
+        screen_width: 1366,
+        screen_height: 768,
         timezone: 'America/New_York',
         lang: 'en-US',
         proxy: null,
@@ -26,7 +26,7 @@ export default function ProfilesPage() {
         cpu: 8,
         ram: 8,
         is_touch: false,
-        homepage: 'https://whoer.net',
+        homepage: 'https://2ip.ru',
     };
 
     const [formData, setFormData] = useState<Profile>(emptyProfile);
@@ -119,10 +119,10 @@ export default function ProfilesPage() {
 
     const getProxyInfo = (proxyStr: string | null | undefined) => {
         if (!proxyStr) return null;
-        
+
         const proxy = proxies.find(p => p.proxy_str === proxyStr);
         if (!proxy) return { country: 'Unknown', host: 'Unknown' };
-        
+
         return {
             country: proxy.country || 'Unknown',
             city: proxy.city || '',
@@ -175,9 +175,9 @@ export default function ProfilesPage() {
                                     {/* Screen Resolution */}
                                     <div className="flex items-center gap-2 text-xs text-gray-700">
                                         <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <rect x="2" y="3" width="20" height="14" rx="2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                            <line x1="8" y1="21" x2="16" y2="21" strokeWidth="2" strokeLinecap="round"/>
-                                            <line x1="12" y1="17" x2="12" y2="21" strokeWidth="2" strokeLinecap="round"/>
+                                            <rect x="2" y="3" width="20" height="14" rx="2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                            <line x1="8" y1="21" x2="16" y2="21" strokeWidth="2" strokeLinecap="round" />
+                                            <line x1="12" y1="17" x2="12" y2="21" strokeWidth="2" strokeLinecap="round" />
                                         </svg>
                                         <span className="font-medium">{profile.screen_width}×{profile.screen_height}</span>
                                     </div>
@@ -185,8 +185,8 @@ export default function ProfilesPage() {
                                     {/* Language & Timezone */}
                                     <div className="flex items-center gap-2 text-xs text-gray-700">
                                         <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <circle cx="12" cy="12" r="10" strokeWidth="2"/>
-                                            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" strokeWidth="2"/>
+                                            <circle cx="12" cy="12" r="10" strokeWidth="2" />
+                                            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" strokeWidth="2" />
                                         </svg>
                                         <span>{profile.lang}</span>
                                         <span className="text-gray-400">•</span>
@@ -223,7 +223,7 @@ export default function ProfilesPage() {
                                             <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                                         ) : (
                                             <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                                                <path d="M8 5v14l11-7z"/>
+                                                <path d="M8 5v14l11-7z" />
                                             </svg>
                                         )}
                                     </button>

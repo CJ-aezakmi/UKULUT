@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Antic Proxy Extension",
+  "version": "1.0.0",
+  "description": "SOCKS5 proxy support for Antic Browser",
+  "permissions": [
+    "proxy",
+    "storage",
+    "webRequest"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}

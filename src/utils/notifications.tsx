@@ -36,7 +36,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     ) => {
         const id = Math.random().toString(36).substr(2, 9);
         const notification: Notification = { id, title, message, type, duration };
-        
+
         setNotifications((prev) => [...prev, notification]);
 
         // Автоматическое скрытие
@@ -82,7 +82,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     return (
         <NotificationContext.Provider value={{ showNotification }}>
             {children}
-            
+
             {/* Контейнер уведомлений в правом верхнем углу */}
             <div className="fixed top-4 right-4 z-50 flex flex-col gap-3 max-w-md">
                 {notifications.map((notification) => {
