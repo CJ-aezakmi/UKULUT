@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "2.0.3"
+version = "2.0.4"
 description = "Antic Browser - Advanced Anti-Detect Browser"
 authors = ["Antic Browser Inc."]
 license = "MIT"

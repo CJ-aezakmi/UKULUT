@@ -116,16 +116,21 @@ pub async fn launch_profile(
         cmd.env("PATH", &node_dir);
     }
 
-    // Скрываем консольное окно на Windows
+    // Скрываем консольное окно на Windows и делаем процесс независимым
     #[cfg(target_os = "windows")]
     {
         const CREATE_NO_WINDOW: u32 = 0x08000000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
+        const DETACHED_PROCESS: u32 = 0x00000008;
+        cmd.creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS);
     }
 
-    // Запускаем процесс
+    // Запускаем процесс и забываем о нем (detached)
     match cmd.spawn() {
-        Ok(_) => Ok(format!("Profile '{}' launched successfully", profile_name)),
+        Ok(mut child) => {
+            // Забываем о процессе чтобы он работал независимо
+            std::mem::forget(child);
+            Ok(format!("Profile '{}' launched successfully", profile_name))
+        },
         Err(e) => Err(format!("Failed to launch browser: {}. Make sure Node.js and Playwright are installed.", e)),
     }
 }
