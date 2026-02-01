@@ -10,23 +10,34 @@
   "author": "CJ-aezakmi",
   "license": "MIT",
   "dependencies": {
-    "electron": "^28.0.0",
     "axios": "^1.6.0",
     "semver": "^7.5.4"
   },
   "devDependencies": {
+    "electron": "^28.0.0",
     "electron-builder": "^24.9.1"
   },
   "build": {
     "appId": "com.anticbrowser.launcher",
-    "productName": "Antic Browser Launcher",
+    "productName": "Antic Browser",
     "win": {
-      "target": "nsis",
-      "icon": "icon.ico"
+      "target": ["nsis"],
+      "icon": "icon.ico",
+      "artifactName": "Antic.Browser_${version}_x64-setup.${ext}",
+      "sign": null
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
-    }
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "perMachine": false
+    },
+    "files": [
+      "**/*",
+      "!node_modules/**/*"
+    ]
   }
 }

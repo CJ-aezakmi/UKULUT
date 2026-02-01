@@ -54,9 +54,11 @@
         }
 
         .logo {
-            font-size: 64px;
+            width: 80px;
+            height: 80px;
             margin-bottom: 20px;
             animation: pulse 2s ease-in-out infinite;
+            border-radius: 10px;
         }
 
         @keyframes pulse {
@@ -133,7 +135,7 @@
     <div class="launcher">
         <button class="close-btn" onclick="closeApp()">✕</button>
         
-        <div class="logo">🚀</div>
+        <img src="icon.ico" class="logo" alt="Antic Browser">
         
         <div class="title">Antic Browser</div>
         <div class="subtitle">Launcher & Auto-Updater</div>
@@ -148,7 +150,7 @@
         
         <div class="spinner" id="spinner"></div>
         
-        <div class="version">v1.0.0</div>
+        <div class="version">v 2.0.0</div>
     </div>
 
     <script>

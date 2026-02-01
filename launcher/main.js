@@ -251,7 +251,7 @@ async function checkAndInstallPlaywright() {
         await ensurePlaywrightRuntime();
     } catch (error) {
         console.error('[Launcher] Playwright check error:', error);
-        // Не критичная ошибка
+        throw error;
     }
 }
 
@@ -276,7 +276,7 @@ async function ensureNodeRuntime() {
     const extractDir = path.join(app.getPath('temp'), `node-${Date.now()}`);
     fs.mkdirSync(extractDir, { recursive: true });
     await new Promise((resolve, reject) => {
-        const cmd = `powershell -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${extractDir}' -Force"`;
+        const cmd = `powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [IO.Compression.ZipFile]::ExtractToDirectory('${zipPath}','${extractDir}', $true)"`;
         exec(cmd, (error) => (error ? reject(error) : resolve()));
     });
 
