@@ -299,12 +299,17 @@ async function launchApp() {
             throw new Error('Приложение не найдено после установки');
         }
         
-        // Запускаем приложение
-        spawn(exePath, [], {
-            detached: true,
-            stdio: 'ignore'
-        }).unref();
-        
+        // Запускаем приложение (через shell, чтобы избежать EACCES)
+        await new Promise((resolve, reject) => {
+            const cmd = `cmd /c start "" "${exePath}"`;
+            exec(cmd, (error) => {
+                if (error) {
+                    return reject(error);
+                }
+                resolve();
+            });
+        });
+
         console.log('[Launcher] App launched successfully');
         
     } catch (error) {
