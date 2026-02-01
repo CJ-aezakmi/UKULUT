@@ -414,8 +414,23 @@ async function launchBrowser() {
         // Создание страницы
         const page = await context.newPage();
 
+        // Добавляем обработчики событий для отладки
+        page.on('close', () => {
+            console.log('❌ Page closed event fired!');
+        });
+
+        page.on('crash', () => {
+            console.log('💥 Page crashed!');
+        });
+
+        context.on('page', (newPage) => {
+            console.log('📄 New page created');
+        });
+
         // Открытие стартовой страницы
+        console.log('🌐 Opening homepage:', config.homepage);
         await page.goto(config.homepage);
+        console.log('✅ Homepage loaded successfully');
 
         console.log(`Browser launched for profile: ${config.profileName}`);
         console.log('Browser will remain open. Close it manually when done.');
@@ -429,7 +444,7 @@ async function launchBrowser() {
             }
         }, 30000);
 
-        // Обработчик закрытия контекста
+        // Обработчик закрытия контекста (НЕ выходим из процесса!)
         context.on('close', async () => {
             console.log('Browser context closed, saving cookies...');
             clearInterval(saveInterval);
@@ -438,7 +453,7 @@ async function launchBrowser() {
             } catch (e) {
                 console.error('Failed to save cookies:', e);
             }
-            process.exit(0);
+            // НЕ вызываем process.exit() - позволяем браузеру продолжать работу
         });
 
         // Держим процесс живым - НЕ выходим пока браузер не закроется

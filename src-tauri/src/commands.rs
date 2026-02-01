@@ -130,9 +130,9 @@ pub async fn launch_profile(
         node_args.push(proxy_str.clone());
     }
 
-    // Создаем команду через cmd.exe для независимого запуска
-    let mut cmd = Command::new("cmd");
-    cmd.args(&["/C", "start", "/B", &node_exe]);
+    // Запускаем node.exe НАПРЯМУЮ (без cmd)
+    let mut cmd = Command::new(&node_exe);
+    cmd.arg(&launcher_path);
     cmd.args(&node_args);
     
     cmd.env("NODE_PATH", &node_modules);
