@@ -2,7 +2,7 @@
 name = "app"
 version = "2.0.1"
 description = "Antic Browser - Advanced Anti-Detect Browser"
-authors = ["CJ-aezakmi"]
+authors = ["Antic Browser Inc."]
 license = "MIT"
 repository = "https://github.com/CJ-aezakmi/UKULUT"
 edition = "2021"
