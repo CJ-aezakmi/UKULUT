@@ -7,15 +7,11 @@ on:
   workflow_dispatch:
 
 jobs:
-  release:
+  build-tauri-app:
     permissions:
       contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        platform: [windows-latest]
-
-    runs-on: ${{ matrix.platform }}
+    runs-on: windows-latest
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -36,10 +32,7 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Install Playwright browsers
-        run: npx playwright install chromium
-
-      - name: Build the app
+      - name: Build Tauri app (MSI only)
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -49,17 +42,58 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'Antic Browser ${{ github.ref_name }}'
           releaseBody: |
-            🎉 New release of Antic Browser!
+            🎉 Новый релиз Antic Browser!
             
-            ## What's New
-            - Advanced anti-detect browser features
-            - Proxy management (SX.ORG, CyberYozh, PSB Proxy)
-            - Profile configuration with fingerprinting
-            - Automatic updates
+            ## Что нового
+            - Антидетект браузер с продвинутыми функциями
+            - Управление прокси (SX.ORG, CyberYozh, PSB Proxy)
+            - Настройка профилей с fingerprinting
+            - Автоматическая установка Node.js и Playwright/Chromium
+            - Автоматические обновления
             
-            ## Installation
-            Download the installer below and run it.
-            The app will automatically check for updates.
+            ## Установка
+            **Скачайте Antic.Browser_2.0.0_x64-setup.exe** (лаунчер) ниже.
+            При первом запуске лаунчер автоматически:
+            1. Установит основное приложение
+            2. Скачает и настроит Node.js
+            3. Установит Playwright и Chromium
+            4. Запустит Antic Browser
+            
+            Все зависимости устанавливаются автоматически!
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
+
+  build-launcher:
+    needs: build-tauri-app
+    permissions:
+      contents: write
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install launcher dependencies
+        run: |
+          cd launcher
+          npm install
+
+      - name: Build launcher with electron-builder
+        run: |
+          cd launcher
+          npm run build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload launcher to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: launcher/dist/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
