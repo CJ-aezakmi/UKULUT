@@ -1,6 +1,6 @@
 {
   "name": "antic-browser-launcher",
-  "version": "1.0.0",
+  "version": "2.0.1",
   "description": "Auto-updater and dependency manager for Antic Browser",
   "main": "main.js",
   "scripts": {
