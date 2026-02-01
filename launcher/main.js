@@ -407,6 +407,78 @@ async function ensurePlaywrightRuntime() {
             });
         });
     }
+    
+    // Создаём симлинк на node_modules в директории приложения для работы ES модулей
+    await ensureAppNodeModules();
+}
+
+async function ensureAppNodeModules() {
+    const exePath = findInstalledExe();
+    if (!exePath) return;
+    
+    const appDir = path.dirname(exePath);
+    const nodeModulesLink = path.join(appDir, 'node_modules');
+    const packageJsonPath = path.join(appDir, 'package.json');
+    
+    // Создаём package.json с type: module если его нет
+    if (!fs.existsSync(packageJsonPath)) {
+        fs.writeFileSync(
+            packageJsonPath,
+            JSON.stringify({ name: 'playwright-launcher', type: 'module', private: true }, null, 2)
+        );
+        console.log('[Launcher] Created package.json for ES modules');
+    }
+    
+    // Проверяем существует ли уже симлинк/папка
+    if (fs.existsSync(nodeModulesLink)) {
+        try {
+            const stats = fs.lstatSync(nodeModulesLink);
+            if (stats.isSymbolicLink() || stats.isDirectory()) {
+                console.log('[Launcher] node_modules link already exists');
+                return;
+            }
+        } catch (e) {
+            // Игнорируем ошибки
+        }
+    }
+    
+    // Пытаемся создать символическую ссылку
+    try {
+        await new Promise((resolve, reject) => {
+            const cmd = `mklink /D "${nodeModulesLink}" "${RUNTIME_NODE_MODULES}"`;
+            exec(`cmd /c ${cmd}`, (error) => {
+                if (error) {
+                    console.warn('[Launcher] Symlink creation failed, copying folder...', error);
+                    // Копируем папку если симлинк не удалось создать
+                    try {
+                        const copyRecursive = (src, dest) => {
+                            if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+                            const items = fs.readdirSync(src, { withFileTypes: true });
+                            for (const item of items) {
+                                const srcPath = path.join(src, item.name);
+                                const destPath = path.join(dest, item.name);
+                                if (item.isDirectory()) {
+                                    copyRecursive(srcPath, destPath);
+                                } else {
+                                    fs.copyFileSync(srcPath, destPath);
+                                }
+                            }
+                        };
+                        copyRecursive(RUNTIME_NODE_MODULES, nodeModulesLink);
+                        console.log('[Launcher] node_modules folder copied');
+                        resolve();
+                    } catch (copyError) {
+                        reject(copyError);
+                    }
+                } else {
+                    console.log('[Launcher] Symlink created successfully');
+                    resolve();
+                }
+            });
+        });
+    } catch (error) {
+        console.error('[Launcher] Failed to setup node_modules:', error);
+    }
 }
 
 // ============================================
