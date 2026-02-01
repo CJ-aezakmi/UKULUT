@@ -7,6 +7,9 @@ use tauri::State;
 use std::sync::Mutex;
 use std::process::Child;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
 // Глобальное хранилище для дочерних процессов
 pub struct ProcessManager {
     processes: Mutex<Vec<Child>>,
