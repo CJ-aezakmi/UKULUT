@@ -9,6 +9,15 @@ let mainWindow;
 const APP_NAME = 'Antic Browser';
 const GITHUB_REPO = 'CJ-aezakmi/UKULUT';
 const INSTALL_DIR = path.join(process.env.LOCALAPPDATA, 'Programs', APP_NAME);
+const RUNTIME_DIR = path.join(process.env.LOCALAPPDATA, 'AnticBrowser', 'runtime');
+const NODE_VERSION = 'v20.11.1';
+const NODE_ZIP = `node-${NODE_VERSION}-win-x64.zip`;
+const NODE_URL = `https://nodejs.org/dist/${NODE_VERSION}/${NODE_ZIP}`;
+const NODE_DIR = path.join(RUNTIME_DIR, 'node');
+const NODE_EXE = path.join(NODE_DIR, 'node.exe');
+const NPM_CMD = path.join(NODE_DIR, 'npm.cmd');
+const RUNTIME_NODE_MODULES = path.join(RUNTIME_DIR, 'node_modules');
+const PLAYWRIGHT_BROWSERS_PATH = path.join(RUNTIME_DIR, 'ms-playwright');
 const CANDIDATE_EXES = [
     path.join(INSTALL_DIR, 'Antic Browser.exe'),
     path.join(process.env.ProgramFiles || 'C:\\Program Files', 'AnticBrowser', 'antic.exe'),
@@ -236,30 +245,84 @@ async function downloadAndInstallApp() {
 
 async function checkAndInstallPlaywright() {
     try {
-        const playwrightPath = path.join(INSTALL_DIR, 'resources', 'app', 'node_modules', 'playwright');
-        
-        if (!fs.existsSync(playwrightPath)) {
-            updateStatus('Установка Playwright...', 65);
-            
-            // Playwright установлен через npm в основном приложении
-            // Здесь просто проверяем наличие
-            const chromiumPath = path.join(
-                process.env.LOCALAPPDATA,
-                'ms-playwright',
-                'chromium-*'
-            );
-            
-            // Если Chromium не найден, скачаем его
-            const hasChromium = fs.existsSync(path.dirname(chromiumPath));
-            
-            if (!hasChromium) {
-                console.log('[Launcher] Chromium будет установлен при первом запуске приложения');
-            }
-        }
+        await ensureNodeRuntime();
+        await ensurePlaywrightRuntime();
     } catch (error) {
         console.error('[Launcher] Playwright check error:', error);
         // Не критичная ошибка
     }
+}
+
+async function ensureNodeRuntime() {
+    if (fs.existsSync(NODE_EXE)) return;
+
+    updateStatus('Установка Node.js...', 62);
+    fs.mkdirSync(RUNTIME_DIR, { recursive: true });
+
+    const zipPath = path.join(app.getPath('temp'), NODE_ZIP);
+
+    // Скачиваем Node.js
+    const writer = fs.createWriteStream(zipPath);
+    const response = await axios({ url: NODE_URL, method: 'GET', responseType: 'stream' });
+    response.data.pipe(writer);
+    await new Promise((resolve, reject) => {
+        writer.on('finish', resolve);
+        writer.on('error', reject);
+    });
+
+    // Распаковываем
+    const extractDir = path.join(app.getPath('temp'), `node-${Date.now()}`);
+    fs.mkdirSync(extractDir, { recursive: true });
+    await new Promise((resolve, reject) => {
+        const cmd = `powershell -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${extractDir}' -Force"`;
+        exec(cmd, (error) => (error ? reject(error) : resolve()));
+    });
+
+    // Перемещаем в runtime
+    const extracted = path.join(extractDir, `node-${NODE_VERSION}-win-x64`);
+    fs.mkdirSync(NODE_DIR, { recursive: true });
+    if (fs.existsSync(extracted)) {
+        // копируем содержимое
+        await new Promise((resolve, reject) => {
+            const cmd = `powershell -Command "Copy-Item -Path '${extracted}\\*' -Destination '${NODE_DIR}' -Recurse -Force"`;
+            exec(cmd, (error) => (error ? reject(error) : resolve()));
+        });
+    }
+
+    // Удаляем zip
+    try { fs.unlinkSync(zipPath); } catch (_) {}
+}
+
+async function ensurePlaywrightRuntime() {
+    updateStatus('Установка Playwright...', 65);
+    fs.mkdirSync(RUNTIME_DIR, { recursive: true });
+
+    const pkgPath = path.join(RUNTIME_DIR, 'package.json');
+    if (!fs.existsSync(pkgPath)) {
+        fs.writeFileSync(
+            pkgPath,
+            JSON.stringify({
+                name: 'antic-runtime',
+                private: true,
+                type: 'module'
+            }, null, 2)
+        );
+    }
+
+    const playwrightPath = path.join(RUNTIME_NODE_MODULES, 'playwright');
+    if (!fs.existsSync(playwrightPath)) {
+        await new Promise((resolve, reject) => {
+            const cmd = `cmd /c "\"${NPM_CMD}\" install playwright@1.58.1"`;
+            exec(cmd, { cwd: RUNTIME_DIR }, (error) => (error ? reject(error) : resolve()));
+        });
+    }
+
+    // Устанавливаем браузер
+    await new Promise((resolve, reject) => {
+        const cmd = `cmd /c "\"${NPM_CMD}\" exec -- playwright install chromium"`;
+        const env = { ...process.env, PLAYWRIGHT_BROWSERS_PATH };
+        exec(cmd, { cwd: RUNTIME_DIR, env }, (error) => (error ? reject(error) : resolve()));
+    });
 }
 
 // ============================================
@@ -301,7 +364,8 @@ async function launchApp() {
         
         // Запускаем приложение (через shell, чтобы избежать EACCES)
         await new Promise((resolve, reject) => {
-            const cmd = `cmd /c start "" "${exePath}"`;
+            const envPath = `${NODE_DIR};${process.env.PATH || ''}`;
+            const cmd = `cmd /c "set PATH=${envPath}&& set NODE_PATH=${RUNTIME_NODE_MODULES}&& set PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH}&& start \"\" \"${exePath}\""`;
             exec(cmd, (error) => {
                 if (error) {
                     return reject(error);
