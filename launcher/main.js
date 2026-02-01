@@ -4,6 +4,7 @@ const fs = require('fs');
 const { spawn, exec } = require('child_process');
 const axios = require('axios');
 const semver = require('semver');
+const extract = require('extract-zip');
 
 let mainWindow;
 const APP_NAME = 'Antic Browser';
@@ -272,23 +273,30 @@ async function ensureNodeRuntime() {
         writer.on('error', reject);
     });
 
-    // Распаковываем
+    // Распаковываем через extract-zip
     const extractDir = path.join(app.getPath('temp'), `node-${Date.now()}`);
     fs.mkdirSync(extractDir, { recursive: true });
-    await new Promise((resolve, reject) => {
-        const cmd = `powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [IO.Compression.ZipFile]::ExtractToDirectory('${zipPath}','${extractDir}', $true)"`;
-        exec(cmd, (error) => (error ? reject(error) : resolve()));
-    });
+    await extract(zipPath, { dir: extractDir });
 
     // Перемещаем в runtime
     const extracted = path.join(extractDir, `node-${NODE_VERSION}-win-x64`);
     fs.mkdirSync(NODE_DIR, { recursive: true });
     if (fs.existsSync(extracted)) {
-        // копируем содержимое
-        await new Promise((resolve, reject) => {
-            const cmd = `powershell -Command "Copy-Item -Path '${extracted}\\*' -Destination '${NODE_DIR}' -Recurse -Force"`;
-            exec(cmd, (error) => (error ? reject(error) : resolve()));
-        });
+        // копируем содержимое рекурсивно
+        const copyRecursive = (src, dest) => {
+            if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+            const items = fs.readdirSync(src, { withFileTypes: true });
+            for (const item of items) {
+                const srcPath = path.join(src, item.name);
+                const destPath = path.join(dest, item.name);
+                if (item.isDirectory()) {
+                    copyRecursive(srcPath, destPath);
+                } else {
+                    fs.copyFileSync(srcPath, destPath);
+                }
+            }
+        };
+        copyRecursive(extracted, NODE_DIR);
     }
 
     // Удаляем zip
