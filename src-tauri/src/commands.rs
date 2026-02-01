@@ -143,10 +143,12 @@ pub async fn launch_profile(
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
     
-    // Логируем команду
-    println!("🚀 Launching: {:?}", node_exe);
-    println!("📄 Script: {:?}", launcher_path);
-    println!("⚙️ Args: {:?}", cmd);
+    // Логируем команду (только в debug режиме)
+    #[cfg(debug_assertions)]
+    {
+        println!("Launching: {:?}", node_exe);
+        println!("Script: {:?}", launcher_path);
+    }
 
     // Запускаем процесс
     match cmd.spawn() {
