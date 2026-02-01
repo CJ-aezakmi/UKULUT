@@ -52,7 +52,7 @@ jobs:
             - Автоматические обновления
             
             ## Установка
-            **Скачайте Antic.Browser_2.0.0_x64-setup.exe** (лаунчер) ниже.
+            **Скачайте Antic.Browser_2.0.1_x64-setup.exe** (лаунчер) ниже.
             При первом запуске лаунчер автоматически:
             1. Установит основное приложение
             2. Скачает и настроит Node.js
@@ -90,6 +90,7 @@ jobs:
           npm run build
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: Upload launcher to release
         uses: softprops/action-gh-release@v1

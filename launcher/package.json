@@ -9,6 +9,10 @@
   },
   "author": "CJ-aezakmi",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CJ-aezakmi/UKULUT.git"
+  },
   "dependencies": {
     "axios": "^1.6.0",
     "semver": "^7.5.4"

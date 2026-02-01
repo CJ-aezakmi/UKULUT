@@ -48,3 +48,11 @@ test-results/
 # Temporary files
 *.tmp
 *.temp
+
+# Документация и инструкции (не для публикации)
+ФИНАЛЬНЫЕ_ШАГИ.md
+QUICKSTART.md
+*.key
+*.pem
+tauri.key
+tauri.key.pub
