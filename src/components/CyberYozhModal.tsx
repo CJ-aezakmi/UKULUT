@@ -106,30 +106,30 @@ export default function CyberYozhModal({ isOpen, onClose, onProxiesImported }: C
     const loadShopProxies = async () => {
         try {
             console.log('[CyberYozh] Загрузка магазина прокси...');
-            
+
             const data = await api.cyberyozhGetShopProxies(
                 apiKey,
                 undefined,
                 undefined
             );
-            
+
             console.log('[CyberYozh] RAW DATA from Rust:', JSON.stringify(data.slice(0, 2), null, 2));
             console.log('[CyberYozh] Получено прокси:', data.length);
             console.log('[CyberYozh] Первый прокси:', data[0]);
-            
+
             // Преобразуем CyberYozhShopItem в ShopProxy
             let allProxies: ShopProxy[] = data.map(item => {
                 // Извлекаем первый код страны из location_country_code
-                const countryCode = item.location_country_code ? 
+                const countryCode = item.location_country_code ?
                     item.location_country_code.split(',')[0].trim() : 'Global';
-                
+
                 // Парсим цену из строки в число
                 const price = item.price_usd ? parseFloat(item.price_usd) : 0;
-                
+
                 // Конвертируем трафик из MB в GB
                 const trafficGb = item.traffic_limitation ? Math.round(item.traffic_limitation / 1024) : 0;
                 const durationDays = item.days || 30;
-                
+
                 console.log('[CyberYozh] Маппинг прокси:', {
                     title: item.title,
                     price_raw: item.price_usd,
@@ -138,7 +138,7 @@ export default function CyberYozhModal({ isOpen, onClose, onProxiesImported }: C
                     traffic_gb: trafficGb,
                     days: durationDays
                 });
-                
+
                 return {
                     id: item.id,
                     name: item.title || 'Proxy',
@@ -152,16 +152,16 @@ export default function CyberYozhModal({ isOpen, onClose, onProxiesImported }: C
                     duration_days: durationDays
                 };
             });
-            
+
             console.log('[CyberYozh] После маппинга, первый прокси:', allProxies[0]);
-            
+
             // Применяем фильтры на клиенте
             if (countryFilter) {
                 allProxies = allProxies.filter(p => {
                     // Поиск в location_country_code (список через запятую)
                     const itemData = data.find(item => item.id === p.id);
                     if (!itemData || !itemData.location_country_code) return false;
-                    
+
                     const countries = itemData.location_country_code.split(',').map(c => c.trim().toUpperCase());
                     return countries.includes(countryFilter.toUpperCase());
                 });
@@ -170,16 +170,16 @@ export default function CyberYozhModal({ isOpen, onClose, onProxiesImported }: C
                 allProxies = allProxies.filter(p => {
                     const category = categoryFilter.toLowerCase();
                     const accessType = p.access_type.toLowerCase();
-                    
+
                     // Поиск по access_type (например "residential_rotating")
                     if (category === 'residential' && accessType.includes('residential')) return true;
                     if (category === 'mobile' && accessType.includes('mobile')) return true;
                     if (category === 'datacenter' && accessType.includes('datacenter')) return true;
-                    
+
                     return false;
                 });
             }
-            
+
             console.log('[CyberYozh] После фильтрации:', allProxies.length);
             setShopProxies(allProxies);
         } catch (error: any) {
@@ -199,12 +199,12 @@ export default function CyberYozhModal({ isOpen, onClose, onProxiesImported }: C
 
             const data = await response.json();
             const proxiesList = Array.isArray(data) ? data : [];
-            
+
             // Фильтруем только активные и не истекшие
-            const activeProxies = proxiesList.filter((p: HistoryProxy) => 
+            const activeProxies = proxiesList.filter((p: HistoryProxy) =>
                 p.system_status === 'active' && !p.expired
             );
-            
+
             setMyProxies(activeProxies);
         } catch (error) {
             showNotification('Ошибка', 'Не удалось загрузить список прокси', 'error');
@@ -229,7 +229,7 @@ export default function CyberYozhModal({ isOpen, onClose, onProxiesImported }: C
             }
 
             const result = await response.json();
-            
+
             if (Array.isArray(result) && result[0]) {
                 const status = result[0].status;
                 const message = result[0].message;
@@ -454,7 +454,7 @@ export default function CyberYozhModal({ isOpen, onClose, onProxiesImported }: C
                                                         </span>
                                                     </div>
                                                     <p className="font-medium text-sm mb-2">{proxy.name}</p>
-                                                    
+
                                                     <div className="flex gap-4 text-xs text-gray-600 mb-2">
                                                         <div className="flex items-center gap-1">
                                                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -469,20 +469,19 @@ export default function CyberYozhModal({ isOpen, onClose, onProxiesImported }: C
                                                             <span>{proxy.traffic_gb} GB</span>
                                                         </div>
                                                     </div>
-                                                    
+
                                                     <div className="text-lg font-bold text-blue-600">
                                                         ${proxy.price.toFixed(2)} {proxy.currency}
                                                     </div>
                                                 </div>
-                                                
+
                                                 <button
                                                     onClick={() => handleBuyProxy(proxy.id)}
                                                     disabled={proxy.stock_status === 'out_of_stock'}
-                                                    className={`px-4 py-2 rounded-lg font-medium transition ${
-                                                        proxy.stock_status === 'out_of_stock' 
-                                                            ? 'bg-gray-400 cursor-not-allowed text-white' 
+                                                    className={`px-4 py-2 rounded-lg font-medium transition ${proxy.stock_status === 'out_of_stock'
+                                                            ? 'bg-gray-400 cursor-not-allowed text-white'
                                                             : 'bg-green-600 hover:bg-green-700 text-white'
-                                                    }`}
+                                                        }`}
                                                 >
                                                     {proxy.stock_status === 'out_of_stock' ? 'Нет в наличии' : 'Купить'}
                                                 </button>

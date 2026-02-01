@@ -14,13 +14,27 @@
     {
       "identifier": "http:allow-fetch",
       "allow": [
-        { "url": "https://api.sx.org/*" },
-        { "url": "https://my.sx.org/*" },
-        { "url": "https://app.cyberyozh.com/*" },
-        { "url": "http://ip-api.com/*" },
-        { "url": "https://ipapi.co/*" },
-        { "url": "https://httpbin.org/*" },
-        { "url": "https://api.ipify.org/*" }
+        {
+          "url": "https://api.sx.org/*"
+        },
+        {
+          "url": "https://my.sx.org/*"
+        },
+        {
+          "url": "https://app.cyberyozh.com/*"
+        },
+        {
+          "url": "http://ip-api.com/*"
+        },
+        {
+          "url": "https://ipapi.co/*"
+        },
+        {
+          "url": "https://httpbin.org/*"
+        },
+        {
+          "url": "https://api.ipify.org/*"
+        }
       ]
     }
   ]

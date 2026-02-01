@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Antic Browser",
-  "version": "2.0.8",
+  "version": "2.0.9",
   "identifier": "com.anticbrowser.app",
   "build": {
     "frontendDist": "../dist",
@@ -43,7 +43,10 @@
     "longDescription": "Antic Browser - Professional anti-detect browser with proxy management, profile configuration, and automation support.",
     "windows": {
       "wix": {
-        "language": ["en-US", "ru-RU"]
+        "language": [
+          "en-US",
+          "ru-RU"
+        ]
       }
     }
   },

@@ -11,11 +11,11 @@ export default function ProxiesPage() {
     const [proxies, setProxies] = useState<Proxy[]>([]);
     const [checking, setChecking] = useState<Record<string, boolean>>({});
     const [checkResults, setCheckResults] = useState<Record<string, ProxyCheckResult>>({});
-    
+
     // Модальные окна
     const [showSXOrgModal, setShowSXOrgModal] = useState(false);
     const [showCyberYozhModal, setShowCyberYozhModal] = useState(false);
-    
+
     // Форма ручного добавления
     const [quickInput, setQuickInput] = useState('');
     const [manualForm, setManualForm] = useState({
@@ -34,7 +34,7 @@ export default function ProxiesPage() {
         try {
             const data = await api.getProxies();
             setProxies(data);
-            
+
             // Загружаем сохранённые результаты проверки из Proxy данных
             const savedResults: Record<string, ProxyCheckResult> = {};
             data.forEach(proxy => {
@@ -66,7 +66,7 @@ export default function ProxiesPage() {
             // protocol://login:password@IP:port
             // protocol://IP:port
             // IP:port
-            
+
             if (trimmed.includes('://')) {
                 // URL формат
                 const url = new URL(trimmed);
@@ -146,13 +146,13 @@ export default function ProxiesPage() {
     return (
         <div className="p-6 bg-gradient-to-b from-blue-50 to-white min-h-screen">
             {/* Модальные окна */}
-            <SXOrgModal 
-                isOpen={showSXOrgModal} 
+            <SXOrgModal
+                isOpen={showSXOrgModal}
                 onClose={() => setShowSXOrgModal(false)}
                 onProxiesImported={loadProxies}
             />
-            <CyberYozhModal 
-                isOpen={showCyberYozhModal} 
+            <CyberYozhModal
+                isOpen={showCyberYozhModal}
                 onClose={() => setShowCyberYozhModal(false)}
                 onProxiesImported={loadProxies}
             />
@@ -163,7 +163,7 @@ export default function ProxiesPage() {
             {/* Форма добавления прокси */}
             <div className="bg-white rounded-xl shadow-md p-6 mb-6">
                 <h2 className="text-lg font-semibold text-gray-800 mb-4">Добавить новый прокси</h2>
-                
+
                 {/* Быстрый ввод */}
                 <div className="mb-4">
                     <input

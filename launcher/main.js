@@ -55,7 +55,7 @@ function createWindow() {
     });
 
     mainWindow.loadFile('index.html');
-    
+
     // Автоматически начинаем проверку
     setTimeout(() => {
         startLaunchSequence();
@@ -77,10 +77,10 @@ app.on('window-all-closed', () => {
 async function startLaunchSequence() {
     try {
         updateStatus('Проверка установки...', 10);
-        
+
         // Шаг 1: Проверка установлен ли Antic Browser
         const isInstalled = Boolean(findInstalledExe());
-        
+
         if (!isInstalled) {
             updateStatus('Antic Browser не установлен. Скачивание...', 20);
             await downloadAndInstallApp();
@@ -88,35 +88,35 @@ async function startLaunchSequence() {
             // Шаг 2: Проверка обновлений
             updateStatus('Проверка обновлений...', 30);
             const hasUpdate = await checkForUpdates();
-            
+
             if (hasUpdate) {
                 updateStatus('Доступно обновление! Скачивание...', 40);
                 await downloadAndInstallApp();
             }
         }
-        
+
         // Шаг 3: Проверка Playwright/Chromium
         updateStatus('Проверка Playwright/Chromium...', 60);
         await checkAndInstallPlaywright();
-        
+
         // Шаг 4: Проверка других зависимостей
         updateStatus('Проверка зависимостей...', 80);
         await checkDependencies();
-        
+
         // Шаг 5: Запуск приложения
         updateStatus('Запуск Antic Browser...', 95);
         await launchApp();
-        
+
         // Создаём ярлык на рабочем столе
         await createDesktopShortcut();
-        
+
         updateStatus('Готово!', 100);
-        
+
         // Закрываем лаунчер через 1 секунду
         setTimeout(() => {
             app.quit();
         }, 1000);
-        
+
     } catch (error) {
         updateStatus(`Ошибка: ${error.message}`, 0);
         console.error('[Launcher] Error:', error);
@@ -154,18 +154,18 @@ async function checkForUpdates() {
         // Получаем текущую версию
         const packagePath = path.join(INSTALL_DIR, 'resources', 'app', 'package.json');
         let currentVersion = '0.0.0';
-        
+
         if (fs.existsSync(packagePath)) {
             const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
             currentVersion = pkg.version;
         }
-        
+
         // Получаем последнюю версию с GitHub
         const latestRelease = await getLatestRelease();
         const latestVersion = String(latestRelease.tag_name || '').replace('v', '');
-        
+
         console.log(`[Launcher] Current: ${currentVersion}, Latest: ${latestVersion}`);
-        
+
         return semver.gt(latestVersion, currentVersion);
     } catch (error) {
         console.error('[Launcher] Check updates error:', error.message);
@@ -182,15 +182,15 @@ async function downloadAndInstallApp() {
         // Получаем ссылку на установщик
         const release = await getLatestRelease();
         const asset = (release.assets || []).find(a => a.name.endsWith('.msi'));
-        
+
         if (!asset) {
             throw new Error('Установщик не найден');
         }
-        
+
         const installerPath = path.join(app.getPath('temp'), 'antic-browser-setup.msi');
-        
+
         updateStatus('Скачивание установщика...', 30);
-        
+
         // Скачиваем установщик
         const writer = fs.createWriteStream(installerPath);
         const downloadResponse = await axios({
@@ -198,16 +198,16 @@ async function downloadAndInstallApp() {
             method: 'GET',
             responseType: 'stream'
         });
-        
+
         downloadResponse.data.pipe(writer);
-        
+
         await new Promise((resolve, reject) => {
             writer.on('finish', resolve);
             writer.on('error', reject);
         });
-        
+
         updateStatus('Установка...', 50);
-        
+
         // Запускаем установщик (тихая установка, per-user)
         const logPath = path.join(app.getPath('temp'), 'antic-browser-install.log');
         const installCmd = `msiexec /i "${installerPath}" /qn /norestart /l*v "${logPath}" ALLUSERS=2 MSIINSTALLPERUSER=1`;
@@ -220,7 +220,7 @@ async function downloadAndInstallApp() {
                 resolve();
             });
         });
-        
+
         // Ждём завершения установки
         await new Promise(resolve => setTimeout(resolve, 5000));
 
@@ -237,14 +237,14 @@ async function downloadAndInstallApp() {
                 throw new Error(`Установка не завершилась. Проверь лог: ${logPath}`);
             }
         }
-        
+
         // Удаляем установщик
         try {
             fs.unlinkSync(installerPath);
         } catch (e) {
             // Игнорируем ошибку удаления
         }
-        
+
     } catch (error) {
         console.error('[Launcher] Download/Install error:', error);
         const status = error?.response?.status;
@@ -313,7 +313,7 @@ async function ensureNodeRuntime() {
     }
 
     // Удаляем zip
-    try { fs.unlinkSync(zipPath); } catch (_) {}
+    try { fs.unlinkSync(zipPath); } catch (_) { }
 }
 
 async function ensurePlaywrightRuntime() {
@@ -335,7 +335,7 @@ async function ensurePlaywrightRuntime() {
     const playwrightPath = path.join(RUNTIME_NODE_MODULES, 'playwright');
     let needsInstall = !fs.existsSync(playwrightPath);
     let needsUpdate = false;
-    
+
     // Проверяем текущую версию Playwright если установлен
     if (!needsInstall) {
         try {
@@ -343,7 +343,7 @@ async function ensurePlaywrightRuntime() {
             if (fs.existsSync(playwrightPkgPath)) {
                 const playwrightPkg = JSON.parse(fs.readFileSync(playwrightPkgPath, 'utf8'));
                 const currentVersion = playwrightPkg.version;
-                
+
                 // Получаем последнюю версию Playwright с npm
                 const { stdout } = await new Promise((resolve, reject) => {
                     exec('npm view playwright version', (error, stdout) => {
@@ -351,9 +351,9 @@ async function ensurePlaywrightRuntime() {
                         else resolve({ stdout: stdout.trim() });
                     });
                 });
-                
+
                 const latestVersion = stdout;
-                
+
                 if (semver.gt(latestVersion, currentVersion)) {
                     console.log(`[Launcher] Playwright update available: ${currentVersion} -> ${latestVersion}`);
                     needsUpdate = true;
@@ -365,12 +365,12 @@ async function ensurePlaywrightRuntime() {
             console.warn('[Launcher] Could not check Playwright version:', e);
         }
     }
-    
+
     // Устанавливаем или обновляем Playwright
     if (needsInstall || needsUpdate) {
         const action = needsInstall ? 'Установка' : 'Обновление';
         updateStatus(`${action} Playwright до последней версии...`, 66);
-        
+
         await new Promise((resolve, reject) => {
             const cmd = `cmd /c "\"${NPM_CMD}\" install playwright@latest"`;
             exec(cmd, { cwd: RUNTIME_DIR }, (error) => {
@@ -391,7 +391,7 @@ async function ensurePlaywrightRuntime() {
         const files = fs.readdirSync(PLAYWRIGHT_BROWSERS_PATH);
         chromiumInstalled = files.some(f => f.startsWith('chromium-'));
     }
-    
+
     if (!chromiumInstalled || needsUpdate) {
         const action = !chromiumInstalled ? 'Скачивание' : 'Обновление';
         updateStatus(`${action} Chromium...`, 70);
@@ -410,7 +410,7 @@ async function ensurePlaywrightRuntime() {
             });
         });
     }
-    
+
     // Создаём симлинк на node_modules в директории приложения для работы ES модулей
     await ensureAppNodeModules();
 }
@@ -418,11 +418,11 @@ async function ensurePlaywrightRuntime() {
 async function ensureAppNodeModules() {
     const exePath = findInstalledExe();
     if (!exePath) return;
-    
+
     const appDir = path.dirname(exePath);
     const nodeModulesLink = path.join(appDir, 'node_modules');
     const packageJsonPath = path.join(appDir, 'package.json');
-    
+
     // Создаём package.json с type: module если его нет
     if (!fs.existsSync(packageJsonPath)) {
         fs.writeFileSync(
@@ -431,7 +431,7 @@ async function ensureAppNodeModules() {
         );
         console.log('[Launcher] Created package.json for ES modules');
     }
-    
+
     // Проверяем существует ли уже симлинк/папка
     if (fs.existsSync(nodeModulesLink)) {
         try {
@@ -444,7 +444,7 @@ async function ensureAppNodeModules() {
             // Игнорируем ошибки
         }
     }
-    
+
     // Пытаемся создать символическую ссылку
     try {
         await new Promise((resolve, reject) => {
@@ -495,15 +495,15 @@ async function checkDependencies() {
             'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X64',
             'HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X64'
         ];
-        
+
         // Проверка через reg query (необязательно, но полезно)
         // В реальности современные Windows уже имеют эти библиотеки
-        
+
         updateStatus('Проверка системных библиотек...', 85);
-        
+
         // Можно добавить проверку других зависимостей
         // Например, .NET, WebView2 и т.д.
-        
+
     } catch (error) {
         console.error('[Launcher] Dependencies check error:', error);
         // Не критичная ошибка
@@ -520,7 +520,7 @@ async function launchApp() {
         if (!exePath) {
             throw new Error('Приложение не найдено после установки');
         }
-        
+
         // Запускаем приложение (через shell, чтобы избежать EACCES)
         await new Promise((resolve, reject) => {
             const envPath = `${NODE_DIR};${process.env.PATH || ''}`;
@@ -534,7 +534,7 @@ async function launchApp() {
         });
 
         console.log('[Launcher] App launched successfully');
-        
+
     } catch (error) {
         console.error('[Launcher] Launch error:', error);
         throw new Error(`Не удалось запустить: ${error.message}`);
@@ -550,12 +550,12 @@ async function createDesktopShortcut() {
         const shell = require('electron').shell;
         const desktopPath = app.getPath('desktop');
         const shortcutPath = path.join(desktopPath, 'Antic Browser.lnk');
-        
+
         // Удаляем старый ярлык если есть
         if (fs.existsSync(shortcutPath)) {
             fs.unlinkSync(shortcutPath);
         }
-        
+
         // Создаём ярлык на лаунчер (process.execPath)
         const success = shell.writeShortcutLink(shortcutPath, {
             target: process.execPath,
@@ -563,7 +563,7 @@ async function createDesktopShortcut() {
             icon: process.execPath,
             iconIndex: 0
         });
-        
+
         if (success) {
             console.log('[Launcher] Desktop shortcut created:', shortcutPath);
         }

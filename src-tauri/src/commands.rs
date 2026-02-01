@@ -102,38 +102,33 @@ pub async fn launch_profile(
     let node_dir = format!("{}\\node", runtime_dir);
     let node_exe = format!("{}\\node.exe", node_dir);
 
-    // Формируем команду для запуска через cmd.exe
-    let mut node_args = vec![
-        launcher_path.to_string_lossy().to_string(),
-        "--profile-name".to_string(), profile.name.clone(),
-        "--user-agent".to_string(), profile.user_agent.clone(),
-        "--screen-width".to_string(), profile.screen_width.to_string(),
-        "--screen-height".to_string(), profile.screen_height.to_string(),
-        "--timezone".to_string(), profile.timezone.clone(),
-        "--lang".to_string(), profile.lang.clone(),
-        "--homepage".to_string(), profile.homepage.clone(),
-        "--cpu".to_string(), profile.cpu.to_string(),
-        "--ram".to_string(), profile.ram.to_string(),
-        "--vendor".to_string(), profile.vendor.clone(),
-    ];
+    // Формируем аргументы для node.exe
+    let mut cmd = Command::new(&node_exe);
+    cmd.arg(&launcher_path);  // первый аргумент - путь к скрипту
+    
+    // Добавляем параметры профиля
+    cmd.arg("--profile-name").arg(&profile.name);
+    cmd.arg("--user-agent").arg(&profile.user_agent);
+    cmd.arg("--screen-width").arg(profile.screen_width.to_string());
+    cmd.arg("--screen-height").arg(profile.screen_height.to_string());
+    cmd.arg("--timezone").arg(&profile.timezone);
+    cmd.arg("--lang").arg(&profile.lang);
+    cmd.arg("--homepage").arg(&profile.homepage);
+    cmd.arg("--cpu").arg(profile.cpu.to_string());
+    cmd.arg("--ram").arg(profile.ram.to_string());
+    cmd.arg("--vendor").arg(&profile.vendor);
     
     if profile.webgl {
-        node_args.push("--webgl".to_string());
+        cmd.arg("--webgl");
     }
     
     if profile.is_touch {
-        node_args.push("--touch".to_string());
+        cmd.arg("--touch");
     }
     
     if let Some(proxy_str) = &profile.proxy {
-        node_args.push("--proxy".to_string());
-        node_args.push(proxy_str.clone());
+        cmd.arg("--proxy").arg(proxy_str);
     }
-
-    // Запускаем node.exe НАПРЯМУЮ (без cmd)
-    let mut cmd = Command::new(&node_exe);
-    cmd.arg(&launcher_path);
-    cmd.args(&node_args);
     
     cmd.env("NODE_PATH", &node_modules);
     cmd.env("PLAYWRIGHT_BROWSERS_PATH", &playwright_browsers);
@@ -144,12 +139,17 @@ pub async fn launch_profile(
         cmd.env("PATH", &node_dir);
     }
 
-    // Скрываем консольное окно
-    #[cfg(target_os = "windows")]
-    {
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
-    }
+    // ВРЕМЕННО ОТКЛЮЧАЕМ CREATE_NO_WINDOW для отладки
+    // #[cfg(target_os = "windows")]
+    // {
+    //     const CREATE_NO_WINDOW: u32 = 0x08000000;
+    //     cmd.creation_flags(CREATE_NO_WINDOW);
+    // }
+    
+    // Логируем команду
+    println!("🚀 Launching: {:?}", node_exe);
+    println!("📄 Script: {:?}", launcher_path);
+    println!("⚙️ Args: {:?}", cmd);
 
     // Запускаем процесс
     match cmd.spawn() {

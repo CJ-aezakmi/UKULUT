@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -62,8 +63,15 @@
         }
 
         @keyframes pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.05); }
+
+            0%,
+            100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.05);
+            }
         }
 
         .title {
@@ -120,7 +128,9 @@
         }
 
         @keyframes spin {
-            to { transform: rotate(360deg); }
+            to {
+                transform: rotate(360deg);
+            }
         }
 
         .version {
@@ -131,25 +141,26 @@
         }
     </style>
 </head>
+
 <body>
     <div class="launcher">
         <button class="close-btn" onclick="closeApp()">✕</button>
-        
+
         <img src="icon.ico" class="logo" alt="Antic Browser">
-        
+
         <div class="title">Antic Browser</div>
         <div class="subtitle">Launcher & Auto-Updater</div>
-        
+
         <div class="status" id="status">Инициализация...</div>
-        
+
         <div class="progress-container">
             <div class="progress-bar" id="progress-bar"></div>
         </div>
-        
+
         <div class="progress-text" id="progress-text">0%</div>
-        
+
         <div class="spinner" id="spinner"></div>
-        
+
         <div class="version">v 2.0.1</div>
     </div>
 
@@ -160,7 +171,7 @@
             document.getElementById('status').textContent = data.message;
             document.getElementById('progress-bar').style.width = data.progress + '%';
             document.getElementById('progress-text').textContent = data.progress + '%';
-            
+
             // Скрываем спиннер когда завершено
             if (data.progress === 100) {
                 document.getElementById('spinner').style.display = 'none';
@@ -172,4 +183,5 @@
         }
     </script>
 </body>
+
 </html>
