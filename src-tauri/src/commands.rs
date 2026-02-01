@@ -4,9 +4,30 @@ use crate::proxy_checker::ProxyChecker;
 use crate::storage::Storage;
 use std::sync::Arc;
 use tauri::State;
+use std::sync::Mutex;
+use std::process::Child;
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
+
+// Глобальное хранилище для дочерних процессов
+pub struct ProcessManager {
+    processes: Mutex<Vec<Child>>,
+}
+
+impl ProcessManager {
+    pub fn new() -> Self {
+        Self {
+            processes: Mutex::new(Vec::new()),
+        }
+    }
+    
+    pub fn add_process(&self, child: Child) {
+        if let Ok(mut processes) = self.processes.lock() {
+            processes.push(child);
+        }
+    }
+}
 
 // ============================================================================
 // PROFILE COMMANDS
@@ -41,6 +62,7 @@ pub async fn delete_profile(
 pub async fn launch_profile(
     profile_name: String,
     storage: State<'_, Arc<Storage>>,
+    process_manager: State<'_, Arc<ProcessManager>>,
 ) -> Result<String, String> {
     let profile = storage
         .get_profile(&profile_name)
@@ -116,19 +138,18 @@ pub async fn launch_profile(
         cmd.env("PATH", &node_dir);
     }
 
-    // Скрываем консольное окно на Windows и делаем процесс независимым
+    // Скрываем консольное окно на Windows
     #[cfg(target_os = "windows")]
     {
         const CREATE_NO_WINDOW: u32 = 0x08000000;
-        const DETACHED_PROCESS: u32 = 0x00000008;
-        cmd.creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS);
+        cmd.creation_flags(CREATE_NO_WINDOW);
     }
 
-    // Запускаем процесс и забываем о нем (detached)
+    // Запускаем процесс и сохраняем его
     match cmd.spawn() {
-        Ok(mut child) => {
-            // Забываем о процессе чтобы он работал независимо
-            std::mem::forget(child);
+        Ok(child) => {
+            // Сохраняем процесс чтобы он не умер
+            process_manager.add_process(child);
             Ok(format!("Profile '{}' launched successfully", profile_name))
         },
         Err(e) => Err(format!("Failed to launch browser: {}. Make sure Node.js and Playwright are installed.", e)),
