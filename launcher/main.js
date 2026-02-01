@@ -22,6 +22,8 @@ const PLAYWRIGHT_BROWSERS_PATH = path.join(RUNTIME_DIR, 'ms-playwright');
 const CANDIDATE_EXES = [
     path.join(INSTALL_DIR, 'Antic Browser.exe'),
     path.join(INSTALL_DIR, 'app.exe'),
+    path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Antic Browser', 'app.exe'),
+    path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Antic Browser', 'Antic Browser.exe'),
     path.join(process.env.LOCALAPPDATA || '', 'Antic Browser', 'Antic Browser.exe'),
     path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Antic Browser', 'Antic Browser.exe'),
     path.join(process.env.ProgramFiles || 'C:\\Program Files', 'AnticBrowser', 'antic.exe')
