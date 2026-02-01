@@ -27,7 +27,14 @@ const CANDIDATE_EXES = [
 ];
 
 function findInstalledExe() {
-    return CANDIDATE_EXES.find(p => fs.existsSync(p)) || null;
+    const currentExe = process.execPath; // Путь к текущему лаунчеру
+    return CANDIDATE_EXES.find(p => {
+        if (!fs.existsSync(p)) return false;
+        // Проверяем что это не сам лаунчер
+        const resolved = fs.realpathSync(p);
+        const currentResolved = fs.realpathSync(currentExe);
+        return resolved !== currentResolved;
+    }) || null;
 }
 
 function createWindow() {
