@@ -10,7 +10,7 @@
     "tauri": "tauri"
   },
   "keywords": ["antidetect", "browser", "proxy", "automation", "playwright"],
-  "author": "CJ-aezakmi",
+  "author": "Antic Browser Inc.",
   "license": "MIT",
   "dependencies": {
     "@tauri-apps/api": "2.2.0",

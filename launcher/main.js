@@ -204,9 +204,9 @@ async function downloadAndInstallApp() {
         
         // Запускаем установщик (тихая установка, per-user)
         const logPath = path.join(app.getPath('temp'), 'antic-browser-install.log');
+        const installCmd = `msiexec /i "${installerPath}" /qn /norestart /l*v "${logPath}" ALLUSERS=2 MSIINSTALLPERUSER=1 TARGETDIR="${INSTALL_DIR}" REINSTALL=ALL REINSTALLMODE=vomus`;
         await new Promise((resolve) => {
-            const cmd = `msiexec /i "${installerPath}" /qn /norestart /l*v "${logPath}" ALLUSERS=2 MSIINSTALLPERUSER=1 REINSTALL=ALL REINSTALLMODE=vomus`;
-            exec(cmd, (error) => {
+            exec(installCmd, (error) => {
                 const code = error?.code;
                 if (error && code !== 0 && code !== 3010 && code !== 1641) {
                     console.warn('[Launcher] Installer warning:', error);
