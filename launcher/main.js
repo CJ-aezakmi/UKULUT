@@ -337,12 +337,17 @@ async function ensurePlaywrightRuntime() {
         });
     }
 
-    // Устанавливаем браузер
-    await new Promise((resolve, reject) => {
-        const cmd = `cmd /c "\"${NPM_CMD}\" exec -- playwright install chromium"`;
-        const env = { ...process.env, PLAYWRIGHT_BROWSERS_PATH };
-        exec(cmd, { cwd: RUNTIME_DIR, env }, (error) => (error ? reject(error) : resolve()));
-    });
+    // Проверяем установлен ли Chromium
+    const chromiumPath = path.join(PLAYWRIGHT_BROWSERS_PATH, 'chromium-1148');
+    if (!fs.existsSync(chromiumPath)) {
+        updateStatus('Скачивание Chromium... (происходит только первый раз)', 70);
+        // Устанавливаем браузер
+        await new Promise((resolve, reject) => {
+            const cmd = `cmd /c "\"${NPM_CMD}\" exec -- playwright install chromium"`;
+            const env = { ...process.env, PLAYWRIGHT_BROWSERS_PATH };
+            exec(cmd, { cwd: RUNTIME_DIR, env }, (error) => (error ? reject(error) : resolve()));
+        });
+    }
 }
 
 // ============================================
