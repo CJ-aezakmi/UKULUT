@@ -56,3 +56,23 @@ QUICKSTART.md
 *.pem
 tauri.key
 tauri.key.pub
+
+# Тестовые и временные файлы проекта
+КАК_ОБНОВЛЯТЬ.md
+чмошный антик/
+README.md
+**/README.md
+CHANGELOG*.md
+CODE_SIGNING_GUIDE.md
+DEPLOYMENT.md
+SOCKS5-TESTING.md
+release.ps1
+requirements.txt
+antic.py
+antic.manifest
+api_keys.json
+cyberyozh_extension.crx
+download_*.py
+*.yaml
+GeoLite2-*.mmdb
+proxy-extension/
