@@ -273,12 +273,6 @@ export default function SXOrgModal({ isOpen, onClose, onProxiesImported }: SXOrg
                 <div className="p-6">
                     {view === 'login' && (
                         <div>
-                            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-                                <p className="text-sm text-yellow-800">
-                                    🎁 <strong>Промокод ANTIC3 = 3GB бесплатно</strong>
-                                </p>
-                            </div>
-
                             <h3 className="text-lg font-semibold mb-4">Авторизация</h3>
                             <input
                                 type="text"
