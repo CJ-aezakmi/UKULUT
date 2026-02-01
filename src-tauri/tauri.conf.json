@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Antic Browser",
-  "version": "2.0.9",
+  "version": "2.0.10",
   "identifier": "com.anticbrowser.app",
   "build": {
     "frontendDist": "../dist",
@@ -28,6 +28,7 @@
     "targets": "all",
     "resources": [
       "playwright-launcher.js",
+      "newtab.html",
       "proxy-extension",
       "cyberyozh-extension"
     ],
