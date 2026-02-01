@@ -9,7 +9,7 @@ const extract = require('extract-zip');
 let mainWindow;
 const APP_NAME = 'Antic Browser';
 const GITHUB_REPO = 'CJ-aezakmi/UKULUT';
-const INSTALL_DIR = path.join(process.env.LOCALAPPDATA, 'Programs', APP_NAME);
+const INSTALL_DIR = path.join(process.env.LOCALAPPDATA, 'AnticBrowser', 'app');
 const RUNTIME_DIR = path.join(process.env.LOCALAPPDATA, 'AnticBrowser', 'runtime');
 const NODE_VERSION = 'v20.11.1';
 const NODE_ZIP = `node-${NODE_VERSION}-win-x64.zip`;
