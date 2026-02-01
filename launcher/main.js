@@ -107,6 +107,9 @@ async function startLaunchSequence() {
         updateStatus('Запуск Antic Browser...', 95);
         await launchApp();
         
+        // Создаём ярлык на рабочем столе
+        await createDesktopShortcut();
+        
         updateStatus('Готово!', 100);
         
         // Закрываем лаунчер через 1 секунду
@@ -535,6 +538,37 @@ async function launchApp() {
     } catch (error) {
         console.error('[Launcher] Launch error:', error);
         throw new Error(`Не удалось запустить: ${error.message}`);
+    }
+}
+
+// ============================================
+// СОЗДАНИЕ ЯРЛЫКА НА РАБОЧЕМ СТОЛЕ
+// ============================================
+
+async function createDesktopShortcut() {
+    try {
+        const shell = require('electron').shell;
+        const desktopPath = app.getPath('desktop');
+        const shortcutPath = path.join(desktopPath, 'Antic Browser.lnk');
+        
+        // Удаляем старый ярлык если есть
+        if (fs.existsSync(shortcutPath)) {
+            fs.unlinkSync(shortcutPath);
+        }
+        
+        // Создаём ярлык на лаунчер (process.execPath)
+        const success = shell.writeShortcutLink(shortcutPath, {
+            target: process.execPath,
+            description: 'Antic Browser - Anti-detect browser',
+            icon: process.execPath,
+            iconIndex: 0
+        });
+        
+        if (success) {
+            console.log('[Launcher] Desktop shortcut created:', shortcutPath);
+        }
+    } catch (error) {
+        console.error('[Launcher] Failed to create desktop shortcut:', error);
     }
 }
 
