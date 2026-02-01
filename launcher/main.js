@@ -20,6 +20,7 @@ const RUNTIME_NODE_MODULES = path.join(RUNTIME_DIR, 'node_modules');
 const PLAYWRIGHT_BROWSERS_PATH = path.join(RUNTIME_DIR, 'ms-playwright');
 const CANDIDATE_EXES = [
     path.join(INSTALL_DIR, 'Antic Browser.exe'),
+    path.join(INSTALL_DIR, 'app.exe'),
     path.join(process.env.ProgramFiles || 'C:\\Program Files', 'AnticBrowser', 'antic.exe'),
     path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Antic Browser', 'Antic Browser.exe')
 ];
@@ -196,9 +197,10 @@ async function downloadAndInstallApp() {
         // Запускаем установщик (тихая установка, per-user)
         const logPath = path.join(app.getPath('temp'), 'antic-browser-install.log');
         await new Promise((resolve) => {
-            const cmd = `msiexec /i "${installerPath}" /qn /norestart /l*v "${logPath}" ALLUSERS=2 MSIINSTALLPERUSER=1`;
+            const cmd = `msiexec /i "${installerPath}" /qn /norestart /l*v "${logPath}" ALLUSERS=2 MSIINSTALLPERUSER=1 REINSTALL=ALL REINSTALLMODE=vomus`;
             exec(cmd, (error) => {
-                if (error && error.code !== 0) {
+                const code = error?.code;
+                if (error && code !== 0 && code !== 3010 && code !== 1641) {
                     console.warn('[Launcher] Installer warning:', error);
                 }
                 resolve();
@@ -212,7 +214,7 @@ async function downloadAndInstallApp() {
             // Повтор с повышенными правами (UAC)
             updateStatus('Требуются права администратора. Повторная установка...', 55);
             await new Promise((resolve) => {
-                const args = `/i "${installerPath}" /passive /norestart /l*v "${logPath}"`;
+                const args = `/i "${installerPath}" /passive /norestart /l*v "${logPath}" REINSTALL=ALL REINSTALLMODE=vomus`;
                 const ps = `Start-Process msiexec -ArgumentList '${args}' -Verb RunAs -Wait`;
                 exec(`powershell -Command "${ps}"`, () => resolve());
             });
