@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 pub use commands::*;
 pub use storage::Storage;
+pub use commands::ProcessManager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -28,6 +29,10 @@ pub fn run() {
       let app_dir = app.path().app_data_dir().expect("Failed to get app data dir");
       let storage = Arc::new(Storage::new(app_dir).expect("Failed to initialize storage"));
       app.manage(storage);
+
+      // Инициализируем менеджер процессов
+      let process_manager = Arc::new(ProcessManager::new());
+      app.manage(process_manager);
 
       Ok(())
     })
