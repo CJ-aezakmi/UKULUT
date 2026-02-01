@@ -204,7 +204,7 @@ async function downloadAndInstallApp() {
         
         // Запускаем установщик (тихая установка, per-user)
         const logPath = path.join(app.getPath('temp'), 'antic-browser-install.log');
-        const installCmd = `msiexec /i "${installerPath}" /qn /norestart /l*v "${logPath}" ALLUSERS=2 MSIINSTALLPERUSER=1 TARGETDIR="${INSTALL_DIR}" REINSTALL=ALL REINSTALLMODE=vomus`;
+        const installCmd = `msiexec /i "${installerPath}" /qn /norestart /l*v "${logPath}" ALLUSERS=2 MSIINSTALLPERUSER=1 INSTALLDIR="${INSTALL_DIR}" REINSTALL=ALL REINSTALLMODE=vomus`;
         await new Promise((resolve) => {
             exec(installCmd, (error) => {
                 const code = error?.code;
