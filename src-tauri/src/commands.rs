@@ -7,9 +7,6 @@ use tauri::State;
 use std::sync::Mutex;
 use std::process::Child;
 
-#[cfg(target_os = "windows")]
-use std::os::windows::process::CommandExt;
-
 // Глобальное хранилище для дочерних процессов
 pub struct ProcessManager {
     processes: Mutex<Vec<Child>>,
@@ -139,12 +136,12 @@ pub async fn launch_profile(
         cmd.env("PATH", &node_dir);
     }
 
-    // ВРЕМЕННО ОТКЛЮЧАЕМ CREATE_NO_WINDOW для отладки
-    // #[cfg(target_os = "windows")]
-    // {
-    //     const CREATE_NO_WINDOW: u32 = 0x08000000;
-    //     cmd.creation_flags(CREATE_NO_WINDOW);
-    // }
+    // Скрываем консоль для production
+    #[cfg(target_os = "windows")]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
     
     // Логируем команду
     println!("🚀 Launching: {:?}", node_exe);

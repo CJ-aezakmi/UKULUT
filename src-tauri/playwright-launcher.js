@@ -725,7 +725,7 @@ async function launchBrowser() {
                     return;
                 }
             } catch (err) {
-                console.error('❌ Error redirecting:', err.message);
+                console.error(' Error redirecting:', err.message);
             }
         }
 
@@ -760,30 +760,30 @@ async function launchBrowser() {
             existingUrl.startsWith('chrome-search://') ||
             existingUrl.includes('google.com/_/chrome/newtab') // New Chrome NTP
         ) {
-            console.log('🆕 Redirecting new tab to custom page');
+            console.log('Redirecting new tab to custom page');
             try {
-                // Исправленный путь: ищем в папке src-tauri, так как лаунчер в корне
-                const newtabPath = path.join(__dirname, 'src-tauri', 'newtab.html');
+                // Ищем newtab.html рядом с launcher
+                let newtabPath = path.join(__dirname, 'newtab.html');
+                
+                // Если не найден - пробуем в src-tauri (dev mode)
+                if (!fs.existsSync(newtabPath)) {
+                    newtabPath = path.join(__dirname, 'src-tauri', 'newtab.html');
+                }
 
                 if (fs.existsSync(newtabPath)) {
                     await newPage.goto(`file://${newtabPath}`, { waitUntil: 'domcontentloaded' });
                 } else {
-                    console.error('❌ newtab.html not found at:', newtabPath);
-                    // Попробуем поискать в текущей директории
-                    const altPath = path.join(__dirname, 'newtab.html');
-                    if (fs.existsSync(altPath)) {
-                        await newPage.goto(`file://${altPath}`, { waitUntil: 'domcontentloaded' });
-                    }
+                    console.error('newtab.html not found');
                 }
             } catch (err) {
-                console.error('❌ Failed to load newtab:', err.message);
+                console.error(' Failed to load newtab:', err.message);
             }
             return;
         }
 
         // Игнорируем другие служебные chrome:// страницы
         if (newPage.url().startsWith('chrome://')) {
-            console.log('⚠️ Skipping internal chrome:// page:', newPage.url());
+            console.log(' Skipping internal chrome:// page:', newPage.url());
             return;
         }
 
@@ -805,7 +805,7 @@ async function launchBrowser() {
                         const query = urlObj.searchParams.get('q');
                         if (query) {
                             const duckUrl = `https://duckduckgo.com/?q=${encodeURIComponent(query)}`;
-                            console.log(`🔄 [NEW TAB] Redirecting "${query}" → DuckDuckGo`);
+                            console.log(` [NEW TAB] Redirecting "${query}"  DuckDuckGo`);
 
                             await newCdpSession.send('Fetch.fulfillRequest', {
                                 requestId,
@@ -817,48 +817,48 @@ async function launchBrowser() {
                             return;
                         }
                     } catch (err) {
-                        console.error('❌ Error redirecting:', err.message);
+                        console.error(' Error redirecting:', err.message);
                     }
                 }
 
                 await newCdpSession.send('Fetch.continueRequest', { requestId }).catch(() => { });
             });
 
-            console.log('✅ CDP search intercept enabled for new tab');
+            console.log(' CDP search intercept enabled for new tab');
         } catch (err) {
-            console.error('❌ Failed to setup CDP for new page:', err.message);
+            console.error(' Failed to setup CDP for new page:', err.message);
         }
 
         // Добавляем обработчики для новых страниц
         newPage.on('close', () => {
-            console.log('❌ New page closed:', newPage.url());
+            console.log(' New page closed:', newPage.url());
         });
 
         newPage.on('crash', () => {
-            console.log('💥 New page crashed!');
+            console.log(' New page crashed!');
         });
 
         // Ждем загрузки новой страницы
         newPage.on('load', () => {
             const url = newPage.url();
             if (!url.startsWith('chrome://')) {
-                console.log('✅ New page loaded:', url);
+                console.log(' New page loaded:', url);
             }
         });
 
         newPage.on('pageerror', (error) => {
-            console.error('⚠️ Page error:', error.message);
+            console.error(' Page error:', error.message);
         });
     });
 
     // Открытие стартовой страницы (НЕ критично - если не загрузится, браузер всё равно работает)
-    console.log('🌐 Opening homepage:', config.homepage);
+    console.log(' Opening homepage:', config.homepage);
     try {
         await page.goto(config.homepage, { timeout: 30000, waitUntil: 'domcontentloaded' });
-        console.log('✅ Homepage loaded successfully');
+        console.log(' Homepage loaded successfully');
     } catch (e) {
-        console.warn('⚠️ Failed to load homepage:', e.message);
-        console.log('📄 Opening blank page instead...');
+        console.warn(' Failed to load homepage:', e.message);
+        console.log(' Opening blank page instead...');
         try {
             await page.goto('about:blank', { waitUntil: 'domcontentloaded' });
         } catch (err) {
