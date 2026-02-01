@@ -1,0 +1,23 @@
+{
+   "action": {
+      "default_popup": "src/popup.html"
+   },
+   "background": {
+      "service_worker": "src/background.js"
+   },
+   "description": "CyberYozh App Extensions is an advanced tool with extensive capabilities for managing proxies and other services.",
+   "host_permissions": [ "https://app.cyberyozh.com/*" ],
+   "icons": {
+      "128": "icon/128.png",
+      "16": "icon/16.png",
+      "32": "icon/32.png",
+      "48": "icon/48.png",
+      "96": "icon/96.png"
+   },
+   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAoT+HkfFb8mjIWZzNYdo2xOwJt+G1k4Lu9+4mLqhWIn6C1e6mHSsOxcJT5cPicBZ9TKji0q3aJzwm+Z+JySgLNhzE/tINhVDzI5VZaCBTSY3Ta4/+zS1ULgC1/6B7SlZwOexdnBHuckIc4/QxSb1TOjhyBRC7ohjGDInOC+iO2+aSwEOJsm4BEWIBkq1zIaO77VBdsxrsW8ccN3rIPtaRBsCqnRO3gbMWdZOfjYYpKodDuvLy1ys4sxqYawNxohJS3uy+YCl6auuZCEqjln1F6sNbXlnSyiDwRCz5EleThIcJRLBjU79UnmnndCF0uV1SCQrnsG9Bk5SDKcnCcey+yQIDAQAB",
+   "manifest_version": 3,
+   "name": "CyberYozh App: Proxy, SMS, Check Fraud Score",
+   "permissions": [ "cookies", "activeTab", "alarms", "notifications", "storage", "offscreen", "clipboardWrite", "proxy", "webRequest", "webRequestAuthProvider" ],
+   "update_url": "https://clients2.google.com/service/update2/crx",
+   "version": "0.2.5"
+}

@@ -113,6 +113,13 @@ pub async fn launch_profile(
         cmd.env("PATH", &node_dir);
     }
 
+    // Скрываем консольное окно на Windows
+    #[cfg(target_os = "windows")]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
     // Запускаем процесс
     match cmd.spawn() {
         Ok(_) => Ok(format!("Profile '{}' launched successfully", profile_name)),

@@ -12,6 +12,11 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Путь к CyberYozh расширению
+const CYBERYOZH_EXTENSION_PATH = path.join(__dirname, 'cyberyozh-extension');
+// Путь к proxy-extension расширению (для SOCKS)
+const PROXY_EXTENSION_PATH = path.join(__dirname, 'proxy-extension');
+
 // Парсинг аргументов командной строки
 function parseArgs() {
     const args = process.argv.slice(2);
@@ -208,6 +213,34 @@ async function launchBrowser() {
         '--enable-features=NetworkService,NetworkServiceInProcess'
     ];
 
+    // Добавляем расширения
+    const extensionsToLoad = [];
+    
+    // 1. CyberYozh расширение (всегда загружается - отображается справа от адресной строки)
+    if (fs.existsSync(CYBERYOZH_EXTENSION_PATH)) {
+        extensionsToLoad.push(CYBERYOZH_EXTENSION_PATH);
+        console.log('[Launcher] Загружено CyberYozh extension:', CYBERYOZH_EXTENSION_PATH);
+    } else {
+        console.warn('[Launcher] CyberYozh extension не найдено:', CYBERYOZH_EXTENSION_PATH);
+    }
+    
+    // 2. Proxy-extension (для SOCKS прокси с авторизацией)
+    if (fs.existsSync(PROXY_EXTENSION_PATH)) {
+        extensionsToLoad.push(PROXY_EXTENSION_PATH);
+        console.log('[Launcher] Загружено proxy-extension:', PROXY_EXTENSION_PATH);
+    } else {
+        console.warn('[Launcher] proxy-extension не найдено:', PROXY_EXTENSION_PATH);
+    }
+    
+    // Добавляем флаги для загрузки расширений
+    if (extensionsToLoad.length > 0) {
+        const extensionPaths = extensionsToLoad.join(',');
+        launchArgs.push(
+            `--disable-extensions-except=${extensionPaths}`,
+            `--load-extension=${extensionPaths}`
+        );
+    }
+
     if (!config.webgl) {
         launchArgs.push('--disable-webgl');
     }
@@ -246,6 +279,26 @@ async function launchBrowser() {
         };
 
         const context = await browser.newContext(contextOptions);
+
+        // Отправляем настройки прокси в расширение (если прокси есть)
+        if (proxy && config.proxy) {
+            try {
+                const page = await context.newPage();
+                await page.evaluate((proxyStr) => {
+                    chrome.runtime.sendMessage(
+                        { type: 'setProxy', proxyString: proxyStr },
+                        (response) => {
+                            if (response && response.success) {
+                                console.log('[Extension] Proxy настроен успешно');
+                            }
+                        }
+                    );
+                }, config.proxy);
+                console.log('[Launcher] Proxy настроен через расширение:', config.proxy.substring(0, 30) + '...');
+            } catch (e) {
+                console.warn('[Launcher] Не удалось настроить proxy через расширение:', e.message);
+            }
+        }
 
         // Маскировка navigator.vendor
         await context.addInitScript(`
