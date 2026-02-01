@@ -27,7 +27,9 @@
     "active": true,
     "targets": "all",
     "resources": [
-      "playwright-launcher.js"
+      "playwright-launcher.js",
+      "proxy-extension/**",
+      "cyberyozh-extension/**"
     ],
     "icon": [
       "icons/32x32.png",
