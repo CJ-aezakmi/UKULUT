@@ -314,7 +314,7 @@ async function ensureNodeRuntime() {
 }
 
 async function ensurePlaywrightRuntime() {
-    updateStatus('Установка Playwright...', 65);
+    updateStatus('Проверка Playwright...', 65);
     fs.mkdirSync(RUNTIME_DIR, { recursive: true });
 
     const pkgPath = path.join(RUNTIME_DIR, 'package.json');
@@ -330,22 +330,81 @@ async function ensurePlaywrightRuntime() {
     }
 
     const playwrightPath = path.join(RUNTIME_NODE_MODULES, 'playwright');
-    if (!fs.existsSync(playwrightPath)) {
+    let needsInstall = !fs.existsSync(playwrightPath);
+    let needsUpdate = false;
+    
+    // Проверяем текущую версию Playwright если установлен
+    if (!needsInstall) {
+        try {
+            const playwrightPkgPath = path.join(playwrightPath, 'package.json');
+            if (fs.existsSync(playwrightPkgPath)) {
+                const playwrightPkg = JSON.parse(fs.readFileSync(playwrightPkgPath, 'utf8'));
+                const currentVersion = playwrightPkg.version;
+                
+                // Получаем последнюю версию Playwright с npm
+                const { stdout } = await new Promise((resolve, reject) => {
+                    exec('npm view playwright version', (error, stdout) => {
+                        if (error) reject(error);
+                        else resolve({ stdout: stdout.trim() });
+                    });
+                });
+                
+                const latestVersion = stdout;
+                
+                if (semver.gt(latestVersion, currentVersion)) {
+                    console.log(`[Launcher] Playwright update available: ${currentVersion} -> ${latestVersion}`);
+                    needsUpdate = true;
+                } else {
+                    console.log(`[Launcher] Playwright is up to date: ${currentVersion}`);
+                }
+            }
+        } catch (e) {
+            console.warn('[Launcher] Could not check Playwright version:', e);
+        }
+    }
+    
+    // Устанавливаем или обновляем Playwright
+    if (needsInstall || needsUpdate) {
+        const action = needsInstall ? 'Установка' : 'Обновление';
+        updateStatus(`${action} Playwright до последней версии...`, 66);
+        
         await new Promise((resolve, reject) => {
-            const cmd = `cmd /c "\"${NPM_CMD}\" install playwright@1.58.1"`;
-            exec(cmd, { cwd: RUNTIME_DIR }, (error) => (error ? reject(error) : resolve()));
+            const cmd = `cmd /c "\"${NPM_CMD}\" install playwright@latest"`;
+            exec(cmd, { cwd: RUNTIME_DIR }, (error) => {
+                if (error) {
+                    console.error('[Launcher] Playwright install/update error:', error);
+                    reject(error);
+                } else {
+                    console.log(`[Launcher] Playwright ${action.toLowerCase()} completed`);
+                    resolve();
+                }
+            });
         });
     }
 
-    // Проверяем установлен ли Chromium
-    const chromiumPath = path.join(PLAYWRIGHT_BROWSERS_PATH, 'chromium-1148');
-    if (!fs.existsSync(chromiumPath)) {
-        updateStatus('Скачивание Chromium... (происходит только первый раз)', 70);
-        // Устанавливаем браузер
+    // Проверяем установлен ли Chromium (ищем любую версию chromium-*)
+    let chromiumInstalled = false;
+    if (fs.existsSync(PLAYWRIGHT_BROWSERS_PATH)) {
+        const files = fs.readdirSync(PLAYWRIGHT_BROWSERS_PATH);
+        chromiumInstalled = files.some(f => f.startsWith('chromium-'));
+    }
+    
+    if (!chromiumInstalled || needsUpdate) {
+        const action = !chromiumInstalled ? 'Скачивание' : 'Обновление';
+        updateStatus(`${action} Chromium...`, 70);
+        // Устанавливаем/обновляем браузер
         await new Promise((resolve, reject) => {
             const cmd = `cmd /c "\"${NPM_CMD}\" exec -- playwright install chromium"`;
             const env = { ...process.env, PLAYWRIGHT_BROWSERS_PATH };
-            exec(cmd, { cwd: RUNTIME_DIR, env }, (error) => (error ? reject(error) : resolve()));
+            exec(cmd, { cwd: RUNTIME_DIR, env }, (error) => {
+                if (error) {
+                    console.error('[Launcher] Chromium install error:', error);
+                    reject(error);
+                } else {
+                    console.log('[Launcher] Chromium install completed');
+                    resolve();
+                }
+            });
         });
     }
 }

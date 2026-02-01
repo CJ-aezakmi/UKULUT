@@ -96,6 +96,23 @@ pub async fn launch_profile(
         cmd.arg("--proxy").arg(proxy_str);
     }
 
+    // Настройка переменных окружения для Node.js и Playwright
+    let local_appdata = env::var("LOCALAPPDATA").unwrap_or_else(|_| String::from("C:\\Users\\Default\\AppData\\Local"));
+    let runtime_dir = format!("{}\\AnticBrowser\\runtime", local_appdata);
+    let node_modules = format!("{}\\node_modules", runtime_dir);
+    let playwright_browsers = format!("{}\\ms-playwright", runtime_dir);
+    let node_dir = format!("{}\\node", runtime_dir);
+    
+    cmd.env("NODE_PATH", &node_modules);
+    cmd.env("PLAYWRIGHT_BROWSERS_PATH", &playwright_browsers);
+    
+    // Добавляем node в PATH
+    if let Ok(current_path) = env::var("PATH") {
+        cmd.env("PATH", format!("{};{}", node_dir, current_path));
+    } else {
+        cmd.env("PATH", &node_dir);
+    }
+
     // Запускаем процесс
     match cmd.spawn() {
         Ok(_) => Ok(format!("Profile '{}' launched successfully", profile_name)),
