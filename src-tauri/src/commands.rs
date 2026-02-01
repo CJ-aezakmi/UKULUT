@@ -79,7 +79,7 @@ pub async fn launch_profile(
     // В режиме разработки: playwright-launcher.js находится в корне проекта
     // В режиме релиза: playwright-launcher.js должен быть рядом с .exe
     let launcher_path = if cfg!(debug_assertions) {
-        // Dev mode: идем на 3 уровня выше (target/debug/app.exe -> target/debug -> target -> корень -> корень проекта)
+        // Dev mode: идем на 3 уровня выше
         exe_dir.parent()
             .and_then(|p| p.parent())
             .and_then(|p| p.parent())
@@ -94,61 +94,66 @@ pub async fn launch_profile(
         return Err(format!("Playwright launcher not found at: {:?}", launcher_path));
     }
 
-    let mut cmd = Command::new("node");
-    cmd.arg(launcher_path);
-    
-    // Передаем параметры профиля через аргументы командной строки
-    cmd.arg("--profile-name").arg(&profile.name);
-    cmd.arg("--user-agent").arg(&profile.user_agent);
-    cmd.arg("--screen-width").arg(profile.screen_width.to_string());
-    cmd.arg("--screen-height").arg(profile.screen_height.to_string());
-    cmd.arg("--timezone").arg(&profile.timezone);
-    cmd.arg("--lang").arg(&profile.lang);
-    cmd.arg("--homepage").arg(&profile.homepage);
-    cmd.arg("--cpu").arg(profile.cpu.to_string());
-    cmd.arg("--ram").arg(profile.ram.to_string());
-    cmd.arg("--vendor").arg(&profile.vendor);
-    
-    if profile.webgl {
-        cmd.arg("--webgl");
-    }
-    
-    if profile.is_touch {
-        cmd.arg("--touch");
-    }
-    
-    if let Some(proxy_str) = &profile.proxy {
-        cmd.arg("--proxy").arg(proxy_str);
-    }
-
-    // Настройка переменных окружения для Node.js и Playwright
+    // Настройка переменных окружения
     let local_appdata = env::var("LOCALAPPDATA").unwrap_or_else(|_| String::from("C:\\Users\\Default\\AppData\\Local"));
     let runtime_dir = format!("{}\\AnticBrowser\\runtime", local_appdata);
     let node_modules = format!("{}\\node_modules", runtime_dir);
     let playwright_browsers = format!("{}\\ms-playwright", runtime_dir);
     let node_dir = format!("{}\\node", runtime_dir);
+    let node_exe = format!("{}\\node.exe", node_dir);
+
+    // Формируем команду для запуска через cmd.exe
+    let mut node_args = vec![
+        launcher_path.to_string_lossy().to_string(),
+        "--profile-name".to_string(), profile.name.clone(),
+        "--user-agent".to_string(), profile.user_agent.clone(),
+        "--screen-width".to_string(), profile.screen_width.to_string(),
+        "--screen-height".to_string(), profile.screen_height.to_string(),
+        "--timezone".to_string(), profile.timezone.clone(),
+        "--lang".to_string(), profile.lang.clone(),
+        "--homepage".to_string(), profile.homepage.clone(),
+        "--cpu".to_string(), profile.cpu.to_string(),
+        "--ram".to_string(), profile.ram.to_string(),
+        "--vendor".to_string(), profile.vendor.clone(),
+    ];
+    
+    if profile.webgl {
+        node_args.push("--webgl".to_string());
+    }
+    
+    if profile.is_touch {
+        node_args.push("--touch".to_string());
+    }
+    
+    if let Some(proxy_str) = &profile.proxy {
+        node_args.push("--proxy".to_string());
+        node_args.push(proxy_str.clone());
+    }
+
+    // Создаем команду через cmd.exe для независимого запуска
+    let mut cmd = Command::new("cmd");
+    cmd.args(&["/C", "start", "/B", &node_exe]);
+    cmd.args(&node_args);
     
     cmd.env("NODE_PATH", &node_modules);
     cmd.env("PLAYWRIGHT_BROWSERS_PATH", &playwright_browsers);
     
-    // Добавляем node в PATH
     if let Ok(current_path) = env::var("PATH") {
         cmd.env("PATH", format!("{};{}", node_dir, current_path));
     } else {
         cmd.env("PATH", &node_dir);
     }
 
-    // Скрываем консольное окно на Windows
+    // Скрываем консольное окно
     #[cfg(target_os = "windows")]
     {
         const CREATE_NO_WINDOW: u32 = 0x08000000;
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
 
-    // Запускаем процесс и сохраняем его
+    // Запускаем процесс
     match cmd.spawn() {
         Ok(child) => {
-            // Сохраняем процесс чтобы он не умер
             process_manager.add_process(child);
             Ok(format!("Profile '{}' launched successfully", profile_name))
         },
