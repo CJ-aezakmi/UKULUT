@@ -22,8 +22,9 @@ const PLAYWRIGHT_BROWSERS_PATH = path.join(RUNTIME_DIR, 'ms-playwright');
 const CANDIDATE_EXES = [
     path.join(INSTALL_DIR, 'Antic Browser.exe'),
     path.join(INSTALL_DIR, 'app.exe'),
-    path.join(process.env.ProgramFiles || 'C:\\Program Files', 'AnticBrowser', 'antic.exe'),
-    path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Antic Browser', 'Antic Browser.exe')
+    path.join(process.env.LOCALAPPDATA || '', 'Antic Browser', 'Antic Browser.exe'),
+    path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Antic Browser', 'Antic Browser.exe'),
+    path.join(process.env.ProgramFiles || 'C:\\Program Files', 'AnticBrowser', 'antic.exe')
 ];
 
 function findInstalledExe() {
@@ -204,7 +205,7 @@ async function downloadAndInstallApp() {
         
         // Запускаем установщик (тихая установка, per-user)
         const logPath = path.join(app.getPath('temp'), 'antic-browser-install.log');
-        const installCmd = `msiexec /i "${installerPath}" /qn /norestart /l*v "${logPath}" ALLUSERS=2 MSIINSTALLPERUSER=1 INSTALLDIR="${INSTALL_DIR}" REINSTALL=ALL REINSTALLMODE=vomus`;
+        const installCmd = `msiexec /i "${installerPath}" /qn /norestart /l*v "${logPath}" ALLUSERS=2 MSIINSTALLPERUSER=1`;
         await new Promise((resolve) => {
             exec(installCmd, (error) => {
                 const code = error?.code;
@@ -222,7 +223,7 @@ async function downloadAndInstallApp() {
             // Повтор с повышенными правами (UAC)
             updateStatus('Требуются права администратора. Повторная установка...', 55);
             await new Promise((resolve) => {
-                const args = `/i "${installerPath}" /passive /norestart /l*v "${logPath}" REINSTALL=ALL REINSTALLMODE=vomus`;
+                const args = `/i "${installerPath}" /passive /norestart /l*v "${logPath}"`;
                 const ps = `Start-Process msiexec -ArgumentList '${args}' -Verb RunAs -Wait`;
                 exec(`powershell -Command "${ps}"`, () => resolve());
             });
