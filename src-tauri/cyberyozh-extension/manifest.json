@@ -18,6 +18,5 @@
    "manifest_version": 3,
    "name": "CyberYozh App: Proxy, SMS, Check Fraud Score",
    "permissions": [ "cookies", "activeTab", "alarms", "notifications", "storage", "offscreen", "clipboardWrite", "proxy", "webRequest", "webRequestAuthProvider" ],
-   "update_url": "https://clients2.google.com/service/update2/crx",
    "version": "0.2.5"
 }

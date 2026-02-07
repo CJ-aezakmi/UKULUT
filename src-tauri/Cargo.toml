@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "2.0.8"
+version = "2.0.11"
 description = "Antic Browser - Advanced Anti-Detect Browser"
 authors = ["Antic Browser Inc."]
 license = "MIT"
@@ -23,7 +23,7 @@ tauri = { version = "2.9.5", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-http = "2"
-reqwest = { version = "0.12", features = ["json", "blocking", "socks"] }
+reqwest = { version = "0.12", features = ["json", "blocking", "socks", "multipart"] }
 tokio = { version = "1", features = ["full"] }
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.10", features = ["v4", "serde"] }

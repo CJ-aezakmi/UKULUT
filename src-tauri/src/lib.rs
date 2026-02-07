@@ -1,7 +1,9 @@
+mod browser;
 mod commands;
 mod models;
 mod proxy_api;
 mod proxy_checker;
+mod proxy_relay;
 mod storage;
 
 use tauri::Manager;
@@ -67,6 +69,27 @@ pub fn run() {
       commands::cyberyozh_buy_proxy,
       commands::cyberyozh_get_my_proxies,
       commands::cyberyozh_import_proxies,
+      
+      // PSB Proxy commands
+      commands::psb_validate_key,
+      commands::psb_get_sub_users,
+      commands::psb_create_sub_user,
+      commands::psb_get_basic_sub_user,
+      commands::psb_get_sub_user,
+      commands::psb_give_traffic,
+      commands::psb_take_traffic,
+      commands::psb_delete_sub_user,
+      commands::psb_get_pool_data,
+      commands::psb_get_countries,
+      commands::psb_get_formats,
+      commands::psb_get_hostnames,
+      commands::psb_get_protocols,
+      commands::psb_generate_proxy_list,
+      commands::psb_add_whitelist_ip,
+      commands::psb_get_whitelist,
+      commands::psb_remove_whitelist_ip,
+      commands::psb_get_my_ip,
+      commands::psb_import_proxy,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

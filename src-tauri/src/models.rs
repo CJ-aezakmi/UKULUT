@@ -212,3 +212,95 @@ impl Default for AppState {
         }
     }
 }
+
+// ============================================================================
+// PSB PROXY MODELS
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PsbSubUser {
+    pub id: u32,
+    pub data: PsbSubUserData,
+    #[serde(rename = "type")]
+    pub sub_type: String,
+    pub user: u32,
+    #[serde(rename = "createdAt")]
+    pub created_at: Option<String>,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PsbSubUserData {
+    pub subuser_id: Option<u32>,
+    pub username: Option<String>,
+    pub password: Option<String>,
+    pub traffic_available: Option<serde_json::Value>, // Can be string "1.00" or number
+    pub traffic_used: Option<serde_json::Value>,
+    pub hash: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PsbSubUsersListResponse {
+    pub data: Vec<PsbSubUser>,
+    pub meta: PsbPaginationMeta,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PsbPaginationMeta {
+    #[serde(rename = "currentPage")]
+    pub current_page: u32,
+    #[serde(rename = "pageSize")]
+    pub page_size: u32,
+    #[serde(rename = "totalPages")]
+    pub total_pages: u32,
+    #[serde(rename = "totalItems")]
+    pub total_items: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PsbCountry {
+    pub country_code: String,
+    pub country_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PsbFormat {
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PsbHostname {
+    #[serde(rename = "type")]
+    pub host_type: String,
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PsbProtocol {
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PsbRotation {
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PsbPoolData {
+    pub available_hostnames: Option<Vec<PsbHostname>>,
+    pub available_countries: Option<serde_json::Value>,
+    pub available_protocols: Option<Vec<PsbProtocol>>,
+    pub available_rotations: Option<Vec<PsbRotation>>,
+    pub available_formats: Option<Vec<PsbFormat>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PsbTrafficStats {
+    pub traffic_available: Option<serde_json::Value>,
+    pub traffic_used: Option<serde_json::Value>,
+}

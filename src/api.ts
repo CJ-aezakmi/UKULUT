@@ -135,6 +135,118 @@ export async function cyberyozhImportProxies(apiKey: string): Promise<string[]> 
 }
 
 // ============================================================================
+// PSB PROXY API
+// ============================================================================
+
+export async function psbValidateKey(apiKey: string): Promise<[boolean, string]> {
+    return await invoke('psb_validate_key', { apiKey });
+}
+
+export async function psbGetSubUsers(apiKey: string): Promise<any> {
+    return await invoke('psb_get_sub_users', { apiKey });
+}
+
+export async function psbCreateSubUser(apiKey: string, subType: string): Promise<any> {
+    return await invoke('psb_create_sub_user', { apiKey, subType });
+}
+
+export async function psbGetBasicSubUser(apiKey: string, subType: string): Promise<any> {
+    return await invoke('psb_get_basic_sub_user', { apiKey, subType });
+}
+
+export async function psbGetSubUser(apiKey: string, id: number): Promise<any> {
+    return await invoke('psb_get_sub_user', { apiKey, id });
+}
+
+export async function psbGiveTraffic(apiKey: string, subUserId: number, amount: number): Promise<any> {
+    return await invoke('psb_give_traffic', { apiKey, subUserId, amount });
+}
+
+export async function psbTakeTraffic(apiKey: string, subUserId: number, amount: number): Promise<any> {
+    return await invoke('psb_take_traffic', { apiKey, subUserId, amount });
+}
+
+export async function psbDeleteSubUser(apiKey: string, subUserId: number): Promise<string> {
+    return await invoke('psb_delete_sub_user', { apiKey, subUserId });
+}
+
+export async function psbGetPoolData(apiKey: string, pool: string): Promise<any> {
+    return await invoke('psb_get_pool_data', { apiKey, pool });
+}
+
+export async function psbGetCountries(apiKey: string, pool: string): Promise<any[]> {
+    return await invoke('psb_get_countries', { apiKey, pool });
+}
+
+export async function psbGetFormats(apiKey: string, pool: string): Promise<any[]> {
+    return await invoke('psb_get_formats', { apiKey, pool });
+}
+
+export async function psbGetHostnames(apiKey: string, pool: string): Promise<any[]> {
+    return await invoke('psb_get_hostnames', { apiKey, pool });
+}
+
+export async function psbGetProtocols(apiKey: string, pool: string): Promise<any[]> {
+    return await invoke('psb_get_protocols', { apiKey, pool });
+}
+
+export async function psbGenerateProxyList(apiKey: string, pool: string, params: any): Promise<string[]> {
+    return await invoke('psb_generate_proxy_list', { apiKey, pool, params });
+}
+
+export async function psbAddWhitelistIp(
+    apiKey: string,
+    pool: string,
+    ip: string,
+    subUserId?: number,
+): Promise<string> {
+    return await invoke('psb_add_whitelist_ip', {
+        apiKey,
+        pool,
+        ip,
+        subUserId: subUserId ?? null,
+    });
+}
+
+export async function psbGetWhitelist(apiKey: string, pool: string, subUserId?: number): Promise<any> {
+    return await invoke('psb_get_whitelist', {
+        apiKey,
+        pool,
+        subUserId: subUserId ?? null,
+    });
+}
+
+export async function psbRemoveWhitelistIp(
+    apiKey: string,
+    pool: string,
+    ip: string,
+    subUserId?: number,
+): Promise<string> {
+    return await invoke('psb_remove_whitelist_ip', {
+        apiKey,
+        pool,
+        ip,
+        subUserId: subUserId ?? null,
+    });
+}
+
+export async function psbGetMyIp(): Promise<string> {
+    return await invoke('psb_get_my_ip');
+}
+
+export async function psbImportProxy(
+    proxyStr: string,
+    protocol?: string,
+    countryCode?: string,
+): Promise<void> {
+    await invoke('psb_import_proxy', {
+        proxyStr,
+        protocol: protocol || null,
+        countryCode: countryCode || null,
+    });
+}
+
+// ============================================================================
 // CONSTANTS
 // ============================================================================
 
@@ -247,4 +359,29 @@ export const cyberyozh = {
         const result = await cyberyozhImportProxies(apiKey);
         return result.length;
     },
+};
+
+export const psb = {
+    validateKey: async (apiKey: string): Promise<boolean> => {
+        const [isValid] = await psbValidateKey(apiKey);
+        return isValid;
+    },
+    getSubUsers: psbGetSubUsers,
+    createSubUser: psbCreateSubUser,
+    getBasicSubUser: psbGetBasicSubUser,
+    getSubUser: psbGetSubUser,
+    giveTraffic: psbGiveTraffic,
+    takeTraffic: psbTakeTraffic,
+    deleteSubUser: psbDeleteSubUser,
+    getPoolData: psbGetPoolData,
+    getCountries: psbGetCountries,
+    getFormats: psbGetFormats,
+    getHostnames: psbGetHostnames,
+    getProtocols: psbGetProtocols,
+    generateProxyList: psbGenerateProxyList,
+    addWhitelistIp: psbAddWhitelistIp,
+    getWhitelist: psbGetWhitelist,
+    removeWhitelistIp: psbRemoveWhitelistIp,
+    getMyIp: psbGetMyIp,
+    importProxy: psbImportProxy,
 };
