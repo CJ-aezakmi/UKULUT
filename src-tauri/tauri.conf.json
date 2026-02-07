@@ -25,7 +25,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": ["nsis", "msi"],
     "resources": [
       "playwright-launcher.js",
       "newtab.html",
@@ -48,6 +48,9 @@
         "installMode": "currentUser",
         "languages": ["English", "Russian"],
         "displayLanguageSelector": false
+      },
+      "wix": {
+        "language": ["en-US", "ru-RU"]
       }
     }
   },
