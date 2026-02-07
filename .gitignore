@@ -71,6 +71,9 @@ requirements.txt
 antic.py
 antic.manifest
 api_keys.json
+proxies.json
+proxy_cache.json
+profiles.json
 cyberyozh_extension.crx
 download_*.py
 *.yaml

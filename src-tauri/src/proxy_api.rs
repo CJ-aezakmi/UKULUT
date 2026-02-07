@@ -7,6 +7,7 @@ use std::time::Duration;
 const SX_ORG_BASE_URL: &str = "https://api.sx.org/";
 const CYBER_YOZH_BASE_URL: &str = "https://app.cyberyozh.com/api/v1/";
 const CYBER_YOZH_V2_URL: &str = "https://app.cyberyozh.com/api/v2/";
+const PSB_PROXY_BASE_URL: &str = "https://psbproxy.io/api/";
 
 pub struct ProxyApiClient {
     client: Client,
@@ -315,5 +316,513 @@ impl ProxyApiClient {
                 }
             })
             .collect()
+    }
+
+    // PSB Proxy API Methods
+    
+    /// Validate PSB API key by checking /subUsers endpoint
+    pub async fn psb_validate_key(&self, api_key: &str) -> Result<(bool, String)> {
+        let url = format!("{}subUsers?page=1&pageSize=1", PSB_PROXY_BASE_URL);
+        
+        let response = self.client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .send()
+            .await?;
+
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+
+        if status.as_u16() == 401 || body.contains("Unauthorized") {
+            return Ok((false, "Неверный API ключ".to_string()));
+        }
+
+        // Try to parse subUsers response to get count
+        if let Ok(data) = serde_json::from_str::<PsbSubUsersListResponse>(&body) {
+            let msg = format!("API ключ подтвержден. SubUsers: {}", data.meta.total_items);
+            return Ok((true, msg));
+        }
+
+        // If we got a non-401 response, key is valid
+        if status.is_success() || status.as_u16() == 404 {
+            return Ok((true, "API ключ подтвержден".to_string()));
+        }
+
+        Ok((false, format!("Ошибка: HTTP {}", status)))
+    }
+
+    /// Get all sub-users
+    pub async fn psb_get_sub_users(&self, api_key: &str) -> Result<PsbSubUsersListResponse> {
+        let url = format!("{}subUsers?page=1&pageSize=100", PSB_PROXY_BASE_URL);
+        
+        let response = self.client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .send()
+            .await?;
+
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+
+        if !status.is_success() {
+            return Err(anyhow!("Failed to get sub-users: HTTP {} - {}", status, body));
+        }
+
+        let data: PsbSubUsersListResponse = serde_json::from_str(&body)
+            .map_err(|e| anyhow!("Failed to parse sub-users: {} - body: {}", e, &body[..body.len().min(200)]))?;
+
+        Ok(data)
+    }
+
+    /// Create a new sub-user
+    pub async fn psb_create_sub_user(&self, api_key: &str, sub_type: &str) -> Result<PsbSubUser> {
+        let url = format!("{}subUsers", PSB_PROXY_BASE_URL);
+        
+        let form = reqwest::multipart::Form::new()
+            .text("type", sub_type.to_string());
+
+        let response = self.client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .multipart(form)
+            .send()
+            .await?;
+
+        let status = response.status();
+        let resp_body = response.text().await.unwrap_or_default();
+
+        if !status.is_success() {
+            return Err(anyhow!("Failed to create sub-user: HTTP {} - {}", status, resp_body));
+        }
+
+        let sub_user: PsbSubUser = serde_json::from_str(&resp_body)
+            .map_err(|e| anyhow!("Failed to parse created sub-user: {} - body: {}", e, &resp_body[..resp_body.len().min(200)]))?;
+
+        Ok(sub_user)
+    }
+
+    /// Get basic sub-user by type
+    pub async fn psb_get_basic_sub_user(&self, api_key: &str, sub_type: &str) -> Result<PsbSubUser> {
+        let url = format!("{}subUsers/basic?type={}", PSB_PROXY_BASE_URL, sub_type);
+        
+        let response = self.client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .send()
+            .await?;
+
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+
+        if !status.is_success() {
+            return Err(anyhow!("SubUser not found: HTTP {} - {}", status, body));
+        }
+
+        let sub_user: PsbSubUser = serde_json::from_str(&body)
+            .map_err(|e| anyhow!("Failed to parse sub-user: {}", e))?;
+
+        Ok(sub_user)
+    }
+
+    /// Get sub-user by ID
+    pub async fn psb_get_sub_user(&self, api_key: &str, id: u32) -> Result<PsbSubUser> {
+        let url = format!("{}subUsers/{}", PSB_PROXY_BASE_URL, id);
+        
+        let response = self.client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .send()
+            .await?;
+
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+
+        if !status.is_success() {
+            return Err(anyhow!("SubUser not found: HTTP {} - {}", status, body));
+        }
+
+        let sub_user: PsbSubUser = serde_json::from_str(&body)
+            .map_err(|e| anyhow!("Failed to parse sub-user: {}", e))?;
+
+        Ok(sub_user)
+    }
+
+    /// Give traffic to sub-user from primary
+    pub async fn psb_give_traffic(&self, api_key: &str, sub_user_id: u32, amount: f64) -> Result<PsbSubUser> {
+        let url = format!("{}subUsers/{}/give-traffic", PSB_PROXY_BASE_URL, sub_user_id);
+        
+        let form = reqwest::multipart::Form::new()
+            .text("amount", amount.to_string());
+
+        let response = self.client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .multipart(form)
+            .send()
+            .await?;
+
+        let status = response.status();
+        let resp_body = response.text().await.unwrap_or_default();
+
+        if !status.is_success() {
+            return Err(anyhow!("Failed to give traffic: HTTP {} - {}", status, resp_body));
+        }
+
+        let sub_user: PsbSubUser = serde_json::from_str(&resp_body)
+            .map_err(|e| anyhow!("Failed to parse response: {}", e))?;
+
+        Ok(sub_user)
+    }
+
+    /// Take traffic from sub-user back to primary
+    pub async fn psb_take_traffic(&self, api_key: &str, sub_user_id: u32, amount: f64) -> Result<PsbSubUser> {
+        let url = format!("{}subUsers/{}/take-traffic", PSB_PROXY_BASE_URL, sub_user_id);
+        
+        let form = reqwest::multipart::Form::new()
+            .text("amount", amount.to_string());
+
+        let response = self.client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .multipart(form)
+            .send()
+            .await?;
+
+        let status = response.status();
+        let resp_body = response.text().await.unwrap_or_default();
+
+        if !status.is_success() {
+            return Err(anyhow!("Failed to take traffic: HTTP {} - {}", status, resp_body));
+        }
+
+        let sub_user: PsbSubUser = serde_json::from_str(&resp_body)
+            .map_err(|e| anyhow!("Failed to parse response: {}", e))?;
+
+        Ok(sub_user)
+    }
+
+    /// Delete sub-user
+    pub async fn psb_delete_sub_user(&self, api_key: &str, sub_user_id: u32) -> Result<String> {
+        let url = format!("{}subUsers/{}", PSB_PROXY_BASE_URL, sub_user_id);
+        
+        let response = self.client
+            .delete(&url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .send()
+            .await?;
+
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+
+        if !status.is_success() {
+            return Err(anyhow!("Failed to delete sub-user: HTTP {} - {}", status, body));
+        }
+
+        Ok("SubUser deleted".to_string())
+    }
+
+    /// Get pool-1 data (hostnames, countries, formats, etc.)
+    pub async fn psb_get_pool_data(&self, api_key: &str, pool: &str) -> Result<serde_json::Value> {
+        let url = format!("{}residential_proxy/{}", PSB_PROXY_BASE_URL, pool);
+        
+        let response = self.client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .send()
+            .await?;
+
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+
+        if !status.is_success() {
+            return Err(anyhow!("Failed to get pool data: HTTP {} - {}", status, body));
+        }
+
+        let data: serde_json::Value = serde_json::from_str(&body)
+            .map_err(|e| anyhow!("Failed to parse pool data: {}", e))?;
+
+        Ok(data)
+    }
+
+    /// Get available countries for a pool
+    pub async fn psb_get_countries(&self, api_key: &str, pool: &str) -> Result<Vec<PsbCountry>> {
+        let url = format!("{}residential_proxy/{}/available_countries", PSB_PROXY_BASE_URL, pool);
+        
+        let response = self.client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .send()
+            .await?;
+
+        let body = response.text().await.unwrap_or_default();
+        
+        let countries: Vec<PsbCountry> = serde_json::from_str(&body)
+            .map_err(|e| anyhow!("Failed to parse countries: {}", e))?;
+
+        Ok(countries)
+    }
+
+    /// Get available formats
+    pub async fn psb_get_formats(&self, api_key: &str, pool: &str) -> Result<Vec<PsbFormat>> {
+        let url = format!("{}residential_proxy/{}/available_formats", PSB_PROXY_BASE_URL, pool);
+        
+        let response = self.client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .send()
+            .await?;
+
+        let body = response.text().await.unwrap_or_default();
+        
+        let formats: Vec<PsbFormat> = serde_json::from_str(&body)
+            .map_err(|e| anyhow!("Failed to parse formats: {}", e))?;
+
+        Ok(formats)
+    }
+
+    /// Get available hostnames
+    pub async fn psb_get_hostnames(&self, api_key: &str, pool: &str) -> Result<Vec<PsbHostname>> {
+        let url = format!("{}residential_proxy/{}/available_hostnames", PSB_PROXY_BASE_URL, pool);
+        
+        let response = self.client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .send()
+            .await?;
+
+        let body = response.text().await.unwrap_or_default();
+        
+        let hostnames: Vec<PsbHostname> = serde_json::from_str(&body)
+            .map_err(|e| anyhow!("Failed to parse hostnames: {}", e))?;
+
+        Ok(hostnames)
+    }
+
+    /// Get available protocols
+    pub async fn psb_get_protocols(&self, api_key: &str, pool: &str) -> Result<Vec<PsbProtocol>> {
+        let url = format!("{}residential_proxy/{}/available_protocols", PSB_PROXY_BASE_URL, pool);
+        
+        let response = self.client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .send()
+            .await?;
+
+        let body = response.text().await.unwrap_or_default();
+        
+        let protocols: Vec<PsbProtocol> = serde_json::from_str(&body)
+            .map_err(|e| anyhow!("Failed to parse protocols: {}", e))?;
+
+        Ok(protocols)
+    }
+
+    /// Get available rotations
+    pub async fn psb_get_rotations(&self, api_key: &str, pool: &str) -> Result<Vec<PsbRotation>> {
+        let url = format!("{}residential_proxy/{}/available_rotations", PSB_PROXY_BASE_URL, pool);
+        
+        let response = self.client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .send()
+            .await?;
+
+        let body = response.text().await.unwrap_or_default();
+        
+        let rotations: Vec<PsbRotation> = serde_json::from_str(&body)
+            .map_err(|e| anyhow!("Failed to parse rotations: {}", e))?;
+
+        Ok(rotations)
+    }
+
+    /// Generate proxy list
+    pub async fn psb_generate_proxy_list(
+        &self,
+        api_key: &str,
+        pool: &str,
+        params: serde_json::Value,
+    ) -> Result<Vec<String>> {
+        let url = format!("{}residential_proxy/{}/generate-proxy-list", PSB_PROXY_BASE_URL, pool);
+        
+        // Build multipart form from params
+        let mut form = reqwest::multipart::Form::new();
+        if let Some(obj) = params.as_object() {
+            for (key, value) in obj {
+                let str_val = match value {
+                    serde_json::Value::String(s) => s.clone(),
+                    serde_json::Value::Number(n) => n.to_string(),
+                    _ => value.to_string(),
+                };
+                if !str_val.is_empty() {
+                    form = form.text(key.clone(), str_val);
+                }
+            }
+        }
+
+        let response = self.client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .multipart(form)
+            .send()
+            .await?;
+
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+
+        if !status.is_success() {
+            return Err(anyhow!("Failed to generate proxy list: HTTP {} - {}", status, body));
+        }
+
+        // Response may be a JSON array or plain text lines
+        let proxies: Vec<String> = serde_json::from_str(&body)
+            .unwrap_or_else(|_| {
+                body.lines()
+                    .map(|l| l.trim().trim_matches('"').trim_matches(',').to_string())
+                    .filter(|l| !l.is_empty() && !l.starts_with('[') && !l.starts_with(']'))
+                    .collect()
+            });
+
+        // Filter out empty strings
+        let proxies: Vec<String> = proxies.into_iter().filter(|p| !p.is_empty()).collect();
+
+        Ok(proxies)
+    }
+
+    /// Rotate IP (reset sticky session)
+    pub async fn psb_rotate_ip(
+        &self,
+        api_key: &str,
+        pool: &str,
+        port: u16,
+    ) -> Result<String> {
+        let url = format!("{}residential_proxy/{}/rotate-ip", PSB_PROXY_BASE_URL, pool);
+        
+        let form = reqwest::multipart::Form::new()
+            .text("port", port.to_string());
+
+        let response = self.client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .multipart(form)
+            .send()
+            .await?;
+
+        let status = response.status();
+        let resp_body = response.text().await.unwrap_or_default();
+
+        if !status.is_success() {
+            return Err(anyhow!("Failed to rotate IP: HTTP {} - {}", status, resp_body));
+        }
+
+        Ok(resp_body)
+    }
+
+    /// Add IP to whitelist
+    pub async fn psb_add_whitelist_ip(
+        &self,
+        api_key: &str,
+        pool: &str,
+        ip: &str,
+        sub_user_id: Option<u32>,
+    ) -> Result<String> {
+        let url = format!("{}residential_proxy/{}/whitelist-entries/add", PSB_PROXY_BASE_URL, pool);
+        
+        let mut form = reqwest::multipart::Form::new()
+            .text("ip", ip.to_string());
+
+        if let Some(id) = sub_user_id {
+            form = form.text("subUser_id", id.to_string());
+        }
+
+        let response = self.client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .multipart(form)
+            .send()
+            .await?;
+
+        let status = response.status();
+        let resp_body = response.text().await.unwrap_or_default();
+
+        if !status.is_success() {
+            return Err(anyhow!("Failed to add IP to whitelist: HTTP {} - {}", status, resp_body));
+        }
+
+        Ok(resp_body)
+    }
+
+    /// Get whitelist entries
+    pub async fn psb_get_whitelist(
+        &self,
+        api_key: &str,
+        pool: &str,
+        sub_user_id: Option<u32>,
+    ) -> Result<serde_json::Value> {
+        let mut url = format!("{}residential_proxy/{}/whitelist-entries", PSB_PROXY_BASE_URL, pool);
+        
+        if let Some(id) = sub_user_id {
+            url.push_str(&format!("?subUser_id={}", id));
+        }
+
+        let response = self.client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .send()
+            .await?;
+
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+
+        if !status.is_success() {
+            return Err(anyhow!("Failed to get whitelist: HTTP {} - {}", status, body));
+        }
+
+        let data: serde_json::Value = serde_json::from_str(&body)
+            .map_err(|e| anyhow!("Failed to parse whitelist: {}", e))?;
+
+        Ok(data)
+    }
+
+    /// Remove IP from whitelist
+    pub async fn psb_remove_whitelist_ip(
+        &self,
+        api_key: &str,
+        pool: &str,
+        ip: &str,
+        sub_user_id: Option<u32>,
+    ) -> Result<String> {
+        let url = format!("{}residential_proxy/{}/whitelist-entries/remove", PSB_PROXY_BASE_URL, pool);
+        
+        let mut form = reqwest::multipart::Form::new()
+            .text("ip", ip.to_string());
+
+        if let Some(id) = sub_user_id {
+            form = form.text("subUser_id", id.to_string());
+        }
+
+        let response = self.client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .multipart(form)
+            .send()
+            .await?;
+
+        let status = response.status();
+        let resp_body = response.text().await.unwrap_or_default();
+
+        if !status.is_success() {
+            return Err(anyhow!("Failed to remove IP from whitelist: HTTP {} - {}", status, resp_body));
+        }
+
+        Ok(resp_body)
+    }
+
+    pub async fn psb_get_my_ip(&self) -> Result<String> {
+        let response = self.client
+            .get("https://api.ipify.org?format=json")
+            .send()
+            .await?;
+        
+        let data: serde_json::Value = response.json().await?;
+        Ok(data["ip"].as_str().unwrap_or("Unknown").to_string())
     }
 }

@@ -73,6 +73,18 @@ impl Storage {
         Ok(())
     }
 
+    /// Save proxy without deduplication check (for bulk PSB imports where strings may repeat)
+    pub fn save_proxy_force(&self, proxy: Proxy) -> Result<()> {
+        let mut state = self.state.lock().unwrap();
+        state.proxies.push(proxy);
+
+        let proxies_path = self.data_dir.join("proxies.json");
+        let json = serde_json::to_string_pretty(&state.proxies)?;
+        fs::write(proxies_path, json)?;
+
+        Ok(())
+    }
+
     pub fn get_proxies(&self) -> Vec<Proxy> {
         let state = self.state.lock().unwrap();
         state.proxies.clone()

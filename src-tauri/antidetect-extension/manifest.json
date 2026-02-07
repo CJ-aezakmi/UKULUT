@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Antic Shield",
+  "version": "1.0.0",
+  "description": "Profile protection layer",
+  "permissions": [],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["inject.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["config.js", "antidetect.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

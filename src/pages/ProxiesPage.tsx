@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react';
 import { Proxy, ProxyCheckResult } from '../types';
 import * as api from '../api';
 import { useNotification } from '../utils/notifications';
-import { openExternal } from '../utils/external';
 import SXOrgModal from '../components/SXOrgModal';
 import CyberYozhModal from '../components/CyberYozhModal';
+import PSBProxyModal from '../components/PSBProxyModal';
 
 export default function ProxiesPage() {
     const { showNotification } = useNotification();
@@ -15,6 +15,7 @@ export default function ProxiesPage() {
     // Модальные окна
     const [showSXOrgModal, setShowSXOrgModal] = useState(false);
     const [showCyberYozhModal, setShowCyberYozhModal] = useState(false);
+    const [showPSBProxyModal, setShowPSBProxyModal] = useState(false);
 
     // Форма ручного добавления
     const [quickInput, setQuickInput] = useState('');
@@ -156,6 +157,11 @@ export default function ProxiesPage() {
                 onClose={() => setShowCyberYozhModal(false)}
                 onProxiesImported={loadProxies}
             />
+            <PSBProxyModal
+                isOpen={showPSBProxyModal}
+                onClose={() => setShowPSBProxyModal(false)}
+                onProxiesImported={loadProxies}
+            />
 
             {/* Заголовок */}
             <h1 className="text-2xl font-bold text-gray-800 mb-6">Управление прокси</h1>
@@ -230,7 +236,7 @@ export default function ProxiesPage() {
                         ➕ Добавить прокси
                     </button>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-3 gap-3">
                         <button
                             onClick={(e) => {
                                 e.preventDefault();
@@ -243,28 +249,20 @@ export default function ProxiesPage() {
                         <button
                             onClick={(e) => {
                                 e.preventDefault();
+                                setShowPSBProxyModal(true);
+                            }}
+                            className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-medium py-3 rounded-lg transition flex items-center justify-center gap-2"
+                        >
+                            🔐 PSB Proxy
+                        </button>
+                        <button
+                            onClick={(e) => {
+                                e.preventDefault();
                                 setShowCyberYozhModal(true);
                             }}
                             className="bg-black hover:bg-gray-900 text-white font-medium py-3 rounded-lg transition flex items-center justify-center gap-2"
                         >
                             🐾 CyberYozh Прокси
-                        </button>
-                    </div>
-
-                    <div className="text-center">
-                        <button
-                            onClick={async (e) => {
-                                e.preventDefault();
-                                try {
-                                    await openExternal('https://psbproxy.io/?utm_source=partner&utm_medium=soft&utm_term=antic&utm_campaign=openincognito');
-                                } catch (err) {
-                                    console.error('[PSB Proxy] Не удалось открыть ссылку:', err);
-                                    showNotification('Ошибка', 'Не удалось открыть ссылку', 'error');
-                                }
-                            }}
-                            className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center justify-center gap-1 mx-auto"
-                        >
-                            PSB Proxy →
                         </button>
                     </div>
                 </div>
