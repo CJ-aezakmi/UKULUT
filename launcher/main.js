@@ -181,20 +181,28 @@ async function downloadAndInstallApp() {
     try {
         // Получаем ссылку на установщик
         const release = await getLatestRelease();
-        const asset = (release.assets || []).find(a => a.name.endsWith('.msi'));
+        // Find NSIS installer by matching release version in filename
+        const releaseVersion = String(release.tag_name || '').replace('v', '');
+        const asset = (release.assets || []).find(a => 
+            a.name.endsWith('_x64-setup.exe') && a.name.includes(`_${releaseVersion}_`)
+        );
+        // Fallback to MSI for old releases
+        const fallbackAsset = !asset ? (release.assets || []).find(a => a.name.endsWith('.msi')) : null;
+        const installer = asset || fallbackAsset;
 
-        if (!asset) {
+        if (!installer) {
             throw new Error('Установщик не найден');
         }
 
-        const installerPath = path.join(app.getPath('temp'), 'antic-browser-setup.msi');
+        const isNsis = installer.name.endsWith('.exe');
+        const installerPath = path.join(app.getPath('temp'), isNsis ? 'antic-browser-setup.exe' : 'antic-browser-setup.msi');
 
         updateStatus('Скачивание установщика...', 30);
 
         // Скачиваем установщик
         const writer = fs.createWriteStream(installerPath);
         const downloadResponse = await axios({
-            url: asset.browser_download_url,
+            url: installer.browser_download_url,
             method: 'GET',
             responseType: 'stream'
         });
@@ -208,33 +216,58 @@ async function downloadAndInstallApp() {
 
         updateStatus('Установка...', 50);
 
-        // Запускаем установщик (тихая установка, per-user)
-        const logPath = path.join(app.getPath('temp'), 'antic-browser-install.log');
-        const installCmd = `msiexec /i "${installerPath}" /qn /norestart /l*v "${logPath}" ALLUSERS=2 MSIINSTALLPERUSER=1`;
-        await new Promise((resolve) => {
-            exec(installCmd, (error) => {
-                const code = error?.code;
-                if (error && code !== 0 && code !== 3010 && code !== 1641) {
-                    console.warn('[Launcher] Installer warning:', error);
-                }
-                resolve();
-            });
-        });
+        // Remove Zone.Identifier (Mark of the Web) to prevent SmartScreen block
+        try {
+            const zoneFile = installerPath + ':Zone.Identifier';
+            fs.unlinkSync(zoneFile);
+        } catch (e) { /* no MOTW or not supported */ }
 
-        // Ждём завершения установки
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        // Install silently
+        if (isNsis) {
+            // NSIS installer: /S for silent, /D for install directory
+            const installCmd = `"${installerPath}" /S /D=${path.join(process.env.LOCALAPPDATA, 'Programs', 'Antic Browser')}`;
+            await new Promise((resolve) => {
+                exec(installCmd, (error) => {
+                    if (error) console.warn('[Launcher] NSIS warning:', error);
+                    resolve();
+                });
+            });
+            await new Promise(resolve => setTimeout(resolve, 5000));
+        } else {
+            // Legacy MSI installer
+            const logPath = path.join(app.getPath('temp'), 'antic-browser-install.log');
+            const installCmd = `msiexec /i "${installerPath}" /qn /norestart /l*v "${logPath}" ALLUSERS=2 MSIINSTALLPERUSER=1`;
+            await new Promise((resolve) => {
+                exec(installCmd, (error) => {
+                    const code = error?.code;
+                    if (error && code !== 0 && code !== 3010 && code !== 1641) {
+                        console.warn('[Launcher] MSI warning:', error);
+                    }
+                    resolve();
+                });
+            });
+            await new Promise(resolve => setTimeout(resolve, 5000));
+        }
 
         if (!findInstalledExe()) {
-            // Повтор с повышенными правами (UAC)
+            // Retry with elevated privileges
             updateStatus('Требуются права администратора. Повторная установка...', 55);
-            await new Promise((resolve) => {
-                const args = `/i "${installerPath}" /passive /norestart /l*v "${logPath}"`;
-                const ps = `Start-Process msiexec -ArgumentList '${args}' -Verb RunAs -Wait`;
-                exec(`powershell -Command "${ps}"`, () => resolve());
-            });
+            if (isNsis) {
+                await new Promise((resolve) => {
+                    const ps = `Start-Process '${installerPath}' -ArgumentList '/S' -Verb RunAs -Wait`;
+                    exec(`powershell -Command "${ps}"`, () => resolve());
+                });
+            } else {
+                const logPath = path.join(app.getPath('temp'), 'antic-browser-install.log');
+                await new Promise((resolve) => {
+                    const args = `/i "${installerPath}" /passive /norestart /l*v "${logPath}"`;
+                    const ps = `Start-Process msiexec -ArgumentList '${args}' -Verb RunAs -Wait`;
+                    exec(`powershell -Command "${ps}"`, () => resolve());
+                });
+            }
 
             if (!findInstalledExe()) {
-                throw new Error(`Установка не завершилась. Проверь лог: ${logPath}`);
+                throw new Error('Установка не завершилась. Попробуйте запустить от имени администратора.');
             }
         }
 

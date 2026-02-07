@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Antic Browser",
-  "version": "2.0.11",
+  "version": "2.0.12",
   "identifier": "com.anticbrowser.app",
   "build": {
     "frontendDist": "../dist",
@@ -25,11 +25,12 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis"],
     "resources": [
       "playwright-launcher.js",
       "newtab.html",
       "proxy-extension",
+      "antidetect-extension",
       "cyberyozh-extension"
     ],
     "icon": [
@@ -43,11 +44,10 @@
     "shortDescription": "Advanced Anti-Detect Browser",
     "longDescription": "Antic Browser - Professional anti-detect browser with proxy management, profile configuration, and automation support.",
     "windows": {
-      "wix": {
-        "language": [
-          "en-US",
-          "ru-RU"
-        ]
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["English", "Russian"],
+        "displayLanguageSelector": false
       }
     }
   },
