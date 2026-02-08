@@ -53,13 +53,47 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
     const [apiKey, setApiKey] = useState('');
     const [tab, setTab] = useState<'proxy' | 'whitelist' | 'subusers'>('proxy');
 
+    // Proxy type
+    type ProxyType = 'residential_proxy' | 'mobile_proxy' | 'datacenter_proxy';
+    const [proxyType, setProxyType] = useState<ProxyType>('residential_proxy');
+
+    const PROXY_TYPE_CONFIG: Record<ProxyType, { label: string; pools: { id: string; label: string; desc: string }[]; subUserPrefix: string; shopPath: string }> = {
+        residential_proxy: {
+            label: 'Residential',
+            pools: [
+                { id: 'pool-1', label: 'Pool-1', desc: 'Ротация через шлюз, по GB' },
+                { id: 'pool-2', label: 'Pool-2', desc: 'Статичные сессии' },
+            ],
+            subUserPrefix: 'residential-proxy',
+            shopPath: 'residential-proxy',
+        },
+        mobile_proxy: {
+            label: 'Mobile',
+            pools: [
+                { id: 'pool-1', label: 'Pool-1', desc: 'Мобильные прокси, ротация' },
+            ],
+            subUserPrefix: 'mobile-proxy',
+            shopPath: 'mobile-proxy',
+        },
+        datacenter_proxy: {
+            label: 'Datacenter',
+            pools: [
+                { id: 'pool-1', label: 'Pool-1', desc: 'Датацентр прокси' },
+            ],
+            subUserPrefix: 'datacenter-proxy',
+            shopPath: 'datacenter-proxy',
+        },
+    };
+
+    const currentConfig = PROXY_TYPE_CONFIG[proxyType];
+
     // SubUsers
     const [subUsers, setSubUsers] = useState<SubUser[]>([]);
     const [selectedSubUser, setSelectedSubUser] = useState<SubUser | null>(null);
     const [creatingSubUser, setCreatingSubUser] = useState(false);
 
     // Pool data
-    const [pool] = useState('pool-1');
+    const [pool, setPool] = useState('pool-1');
     const [countries, setCountries] = useState<Country[]>([]);
     const [formats, setFormats] = useState<Format[]>([]);
     const [hostnames, setHostnames] = useState<Hostname[]>([]);
@@ -96,6 +130,13 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
         }
     }, [view]);
 
+    // Reload pool options when proxyType or pool changes
+    useEffect(() => {
+        if (view === 'main') {
+            loadPoolOptions();
+        }
+    }, [proxyType, pool]);
+
     const loadSubUsers = useCallback(async () => {
         try {
             const result = await api.psbGetSubUsers(apiKey);
@@ -112,10 +153,10 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
     const loadPoolOptions = useCallback(async () => {
         try {
             const [countriesData, formatsData, hostnamesData, protocolsData] = await Promise.all([
-                api.psbGetCountries(apiKey, pool),
-                api.psbGetFormats(apiKey, pool),
-                api.psbGetHostnames(apiKey, pool),
-                api.psbGetProtocols(apiKey, pool),
+                api.psbGetCountries(apiKey, proxyType, pool),
+                api.psbGetFormats(apiKey, proxyType, pool),
+                api.psbGetHostnames(apiKey, proxyType, pool),
+                api.psbGetProtocols(apiKey, proxyType, pool),
             ]);
             setCountries(countriesData);
             setFormats(formatsData);
@@ -124,7 +165,7 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
         } catch (error: any) {
             console.error('[PSB] Failed to load pool options:', error);
         }
-    }, [apiKey, pool]);
+    }, [apiKey, proxyType, pool]);
 
     const loadMyIp = async () => {
         try {
@@ -139,7 +180,7 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
         if (!selectedSubUser) return;
         setWhitelistLoading(true);
         try {
-            const data = await api.psbGetWhitelist(apiKey, pool, selectedSubUser.id);
+            const data = await api.psbGetWhitelist(apiKey, proxyType, pool, selectedSubUser.id);
             setWhitelist(Array.isArray(data) ? data : []);
         } catch (error: any) {
             console.error('[PSB] Failed to load whitelist:', error);
@@ -147,7 +188,7 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
         } finally {
             setWhitelistLoading(false);
         }
-    }, [apiKey, pool, selectedSubUser]);
+    }, [apiKey, proxyType, pool, selectedSubUser]);
 
     useEffect(() => {
         if (tab === 'whitelist' && selectedSubUser) {
@@ -222,7 +263,7 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
             if (selectedCountry) {
                 params.location = selectedCountry;
             }
-            const proxies = await api.psbGenerateProxyList(apiKey, pool, params);
+            const proxies = await api.psbGenerateProxyList(apiKey, proxyType, pool, params);
             setGeneratedProxies(proxies);
             showNotification('Успех', `Сгенерировано ${proxies.length} прокси`, 'success');
         } catch (error: any) {
@@ -258,7 +299,7 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
         if (!myIp || !selectedSubUser) return;
         setLoading(true);
         try {
-            await api.psbAddWhitelistIp(apiKey, pool, myIp, selectedSubUser.id);
+            await api.psbAddWhitelistIp(apiKey, proxyType, pool, myIp, selectedSubUser.id);
             showNotification('Успех', 'IP добавлен в whitelist', 'success');
             await loadWhitelist();
         } catch (error: any) {
@@ -271,7 +312,7 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
     const handleRemoveFromWhitelist = async (ip: string) => {
         if (!selectedSubUser) return;
         try {
-            await api.psbRemoveWhitelistIp(apiKey, pool, ip, selectedSubUser.id);
+            await api.psbRemoveWhitelistIp(apiKey, proxyType, pool, ip, selectedSubUser.id);
             showNotification('Успех', 'IP удален из whitelist', 'success');
             await loadWhitelist();
         } catch (error: any) {
@@ -334,7 +375,7 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
                             <h2 className="text-[15px] font-semibold text-white leading-tight">PSB Proxy</h2>
                             {view === 'main' && selectedSubUser ? (
                                 <p className="text-xs text-gray-500 mt-0.5">
-                                    SubUser #{selectedSubUser.id} &middot; {getTrafficValue(selectedSubUser.data.traffic_available)} GB
+                                    {currentConfig.label} &middot; SubUser #{selectedSubUser.id} &middot; {getTrafficValue(selectedSubUser.data.traffic_available)} GB
                                 </p>
                             ) : view === 'login' ? (
                                 <p className="text-xs text-gray-500 mt-0.5">Подключение к сервису</p>
@@ -345,7 +386,7 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
                         {view === 'main' && (
                             <>
                                 <button
-                                    onClick={() => openExternal('https://psbproxy.io/account/shop/residential-proxy/pool-1')}
+                                    onClick={() => openExternal(`https://psbproxy.io/account/shop/${currentConfig.shopPath}/${pool}`)}
                                     className="px-2.5 py-1.5 text-[11px] text-gray-500 hover:text-white hover:bg-white/5 rounded-md transition-all"
                                 >
                                     Купить трафик
@@ -429,14 +470,14 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
                                         </p>
                                         <div className="flex gap-2">
                                             <button
-                                                onClick={() => handleCreateSubUser('residential-proxy-pool-1')}
+                                                onClick={() => handleCreateSubUser(`${currentConfig.subUserPrefix}-${pool}`)}
                                                 disabled={creatingSubUser}
                                                 className="px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 rounded-md text-xs font-medium transition-colors disabled:opacity-50 border border-amber-500/20"
                                             >
                                                 {creatingSubUser ? 'Создание...' : 'Создать SubUser'}
                                             </button>
                                             <button
-                                                onClick={() => openExternal('https://psbproxy.io/account/shop/residential-proxy/pool-1')}
+                                                onClick={() => openExternal(`https://psbproxy.io/account/shop/${currentConfig.shopPath}/${pool}`)}
                                                 className="px-3 py-1.5 text-amber-400/70 hover:text-amber-300 rounded-md text-xs transition-colors"
                                             >
                                                 Купить трафик
@@ -446,8 +487,57 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
                                 </div>
                             )}
 
-                            {/* Tabs */}
+                            {/* Proxy Type Selector */}
                             <div className="px-6 pt-4 pb-0">
+                                <label className="block text-[10px] font-semibold text-gray-600 mb-1.5 uppercase tracking-wider">Тип прокси</label>
+                                <div className="flex gap-1 mb-3">
+                                    {(Object.entries(PROXY_TYPE_CONFIG) as [ProxyType, typeof currentConfig][]).map(([key, cfg]) => (
+                                        <button
+                                            key={key}
+                                            onClick={() => {
+                                                setProxyType(key);
+                                                setPool(cfg.pools[0].id);
+                                                setGeneratedProxies([]);
+                                                setSelectedCountry('');
+                                                setCountrySearch('');
+                                            }}
+                                            className={`flex-1 py-2 rounded-lg text-[12px] font-semibold transition-all border ${
+                                                proxyType === key
+                                                    ? key === 'residential_proxy'
+                                                        ? 'bg-[#4a6cf7]/10 border-[#4a6cf7]/30 text-[#6b8aff]'
+                                                        : key === 'mobile_proxy'
+                                                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                                                        : 'bg-violet-500/10 border-violet-500/30 text-violet-400'
+                                                    : 'bg-[#111] border-[#222] text-gray-500 hover:text-gray-300 hover:border-[#333]'
+                                            }`}
+                                        >
+                                            {cfg.label}
+                                        </button>
+                                    ))}
+                                </div>
+                                {/* Pool Selector */}
+                                {currentConfig.pools.length > 1 && (
+                                    <div className="flex gap-1 mb-3">
+                                        {currentConfig.pools.map(p => (
+                                            <button
+                                                key={p.id}
+                                                onClick={() => { setPool(p.id); setGeneratedProxies([]); }}
+                                                className={`flex-1 py-1.5 rounded-md text-[11px] font-medium transition-all border ${
+                                                    pool === p.id
+                                                        ? 'bg-[#1e1e1e] border-[#333] text-white'
+                                                        : 'bg-transparent border-[#222] text-gray-500 hover:text-gray-300'
+                                                }`}
+                                                title={p.desc}
+                                            >
+                                                {p.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Tabs */}
+                            <div className="px-6 pt-1 pb-0">
                                 <div className="flex gap-0.5 bg-[#111] p-1 rounded-lg">
                                     {([
                                         ['proxy', 'Генератор', 'M13 10V3L4 14h7v7l9-11h-7z'],
@@ -727,22 +817,21 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
                                 {tab === 'subusers' && (
                                     <div className="space-y-4">
                                         <div className="flex gap-2">
-                                            <button
-                                                onClick={() => handleCreateSubUser('residential-proxy-pool-1')}
-                                                disabled={creatingSubUser}
-                                                className="px-4 py-2 bg-[#4a6cf7] hover:bg-[#3d5de0] text-white rounded-lg text-xs font-medium transition-all disabled:opacity-50 flex items-center gap-1.5"
-                                            >
-                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
-                                                {creatingSubUser ? 'Создание...' : 'Pool-1'}
-                                            </button>
-                                            <button
-                                                onClick={() => handleCreateSubUser('residential-proxy-pool-2')}
-                                                disabled={creatingSubUser}
-                                                className="px-4 py-2 bg-[#1e1e1e] hover:bg-[#252525] text-gray-300 rounded-lg text-xs font-medium transition-all border border-[#2a2a2a] disabled:opacity-50 flex items-center gap-1.5"
-                                            >
-                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
-                                                {creatingSubUser ? 'Создание...' : 'Pool-2'}
-                                            </button>
+                                            {currentConfig.pools.map((p, idx) => (
+                                                <button
+                                                    key={p.id}
+                                                    onClick={() => handleCreateSubUser(`${currentConfig.subUserPrefix}-${p.id}`)}
+                                                    disabled={creatingSubUser}
+                                                    className={`px-4 py-2 rounded-lg text-xs font-medium transition-all disabled:opacity-50 flex items-center gap-1.5 ${
+                                                        idx === 0
+                                                            ? 'bg-[#4a6cf7] hover:bg-[#3d5de0] text-white'
+                                                            : 'bg-[#1e1e1e] hover:bg-[#252525] text-gray-300 border border-[#2a2a2a]'
+                                                    }`}
+                                                >
+                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                                                    {creatingSubUser ? 'Создание...' : p.label}
+                                                </button>
+                                            ))}
                                             <button
                                                 onClick={loadSubUsers}
                                                 className="px-3 py-2 bg-[#1e1e1e] hover:bg-[#252525] text-gray-400 rounded-lg text-xs transition-all border border-[#2a2a2a] ml-auto"
@@ -788,9 +877,12 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
                                                                             {su.data.username || `SubUser #${su.id}`}
                                                                         </span>
                                                                         <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                                                                            su.type.includes('pool-1') ? 'bg-[#4a6cf7]/10 text-[#6b8aff]' : 'bg-teal-500/10 text-teal-400'
+                                                                            su.type.includes('mobile') ? 'bg-emerald-500/10 text-emerald-400'
+                                                                            : su.type.includes('datacenter') ? 'bg-violet-500/10 text-violet-400'
+                                                                            : su.type.includes('pool-1') ? 'bg-[#4a6cf7]/10 text-[#6b8aff]'
+                                                                            : 'bg-teal-500/10 text-teal-400'
                                                                         }`}>
-                                                                            {su.type.includes('pool-1') ? 'POOL-1' : su.type.includes('pool-2') ? 'POOL-2' : su.type.split('-').pop()?.toUpperCase()}
+                                                                            {su.type.includes('mobile') ? 'MOB' : su.type.includes('datacenter') ? 'DC' : ''}{su.type.includes('pool-1') ? ' POOL-1' : su.type.includes('pool-2') ? ' POOL-2' : ` ${su.type.split('-').pop()?.toUpperCase()}`}
                                                                         </span>
                                                                         {isSelected && (
                                                                             <svg className="w-3.5 h-3.5 text-[#4a6cf7]" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
@@ -825,8 +917,7 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
                                             <svg className="w-4 h-4 text-gray-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                             <p className="text-xs text-gray-500 leading-relaxed">
                                                 <span className="text-gray-400">SubUser</span> — подключение к пулу с отдельным балансом.{' '}
-                                                <span className="text-gray-400">Pool-1</span> — ротация через шлюз, по GB.{' '}
-                                                <span className="text-gray-400">Pool-2</span> — статичные сессии.
+                                                <span className="text-gray-400">{currentConfig.label}</span> — {currentConfig.pools.map(p => `${p.label}: ${p.desc}`).join('. ')}.
                                             </p>
                                         </div>
                                     </div>
