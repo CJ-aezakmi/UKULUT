@@ -74,6 +74,8 @@ pub fn run() {
       commands::psb_validate_key,
       commands::psb_get_sub_users,
       commands::psb_create_sub_user,
+      commands::psb_get_products,
+      commands::psb_buy_product,
       commands::psb_get_basic_sub_user,
       commands::psb_get_sub_user,
       commands::psb_give_traffic,

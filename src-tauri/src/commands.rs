@@ -453,6 +453,24 @@ pub async fn psb_create_sub_user(api_key: String, sub_type: String) -> Result<se
 }
 
 #[tauri::command]
+pub async fn psb_get_products() -> Result<serde_json::Value, String> {
+    let client = ProxyApiClient::new();
+    client
+        .psb_get_products()
+        .await
+        .map_err(|e| format!("Failed to get products: {}", e))
+}
+
+#[tauri::command]
+pub async fn psb_buy_product(api_key: String, product_id: u32, payment_type: String) -> Result<serde_json::Value, String> {
+    let client = ProxyApiClient::new();
+    client
+        .psb_buy_product(&api_key, product_id, &payment_type)
+        .await
+        .map_err(|e| format!("Failed to buy product: {}", e))
+}
+
+#[tauri::command]
 pub async fn psb_get_basic_sub_user(api_key: String, sub_type: String) -> Result<serde_json::Value, String> {
     let client = ProxyApiClient::new();
     let result = client
@@ -506,19 +524,19 @@ pub async fn psb_delete_sub_user(api_key: String, sub_user_id: u32) -> Result<St
 }
 
 #[tauri::command]
-pub async fn psb_get_pool_data(api_key: String, proxy_type: String, pool: String) -> Result<serde_json::Value, String> {
+pub async fn psb_get_pool_data(api_key: String, pool: String) -> Result<serde_json::Value, String> {
     let client = ProxyApiClient::new();
     client
-        .psb_get_pool_data(&api_key, &proxy_type, &pool)
+        .psb_get_pool_data(&api_key, &pool)
         .await
         .map_err(|e| format!("Failed to get pool data: {}", e))
 }
 
 #[tauri::command]
-pub async fn psb_get_countries(api_key: String, proxy_type: String, pool: String) -> Result<serde_json::Value, String> {
+pub async fn psb_get_countries(api_key: String, pool: String) -> Result<serde_json::Value, String> {
     let client = ProxyApiClient::new();
     let result = client
-        .psb_get_countries(&api_key, &proxy_type, &pool)
+        .psb_get_countries(&api_key, &pool)
         .await
         .map_err(|e| format!("Failed to get countries: {}", e))?;
     
@@ -526,10 +544,10 @@ pub async fn psb_get_countries(api_key: String, proxy_type: String, pool: String
 }
 
 #[tauri::command]
-pub async fn psb_get_formats(api_key: String, proxy_type: String, pool: String) -> Result<serde_json::Value, String> {
+pub async fn psb_get_formats(api_key: String, pool: String) -> Result<serde_json::Value, String> {
     let client = ProxyApiClient::new();
     let result = client
-        .psb_get_formats(&api_key, &proxy_type, &pool)
+        .psb_get_formats(&api_key, &pool)
         .await
         .map_err(|e| format!("Failed to get formats: {}", e))?;
     
@@ -537,10 +555,10 @@ pub async fn psb_get_formats(api_key: String, proxy_type: String, pool: String) 
 }
 
 #[tauri::command]
-pub async fn psb_get_hostnames(api_key: String, proxy_type: String, pool: String) -> Result<serde_json::Value, String> {
+pub async fn psb_get_hostnames(api_key: String, pool: String) -> Result<serde_json::Value, String> {
     let client = ProxyApiClient::new();
     let result = client
-        .psb_get_hostnames(&api_key, &proxy_type, &pool)
+        .psb_get_hostnames(&api_key, &pool)
         .await
         .map_err(|e| format!("Failed to get hostnames: {}", e))?;
     
@@ -548,10 +566,10 @@ pub async fn psb_get_hostnames(api_key: String, proxy_type: String, pool: String
 }
 
 #[tauri::command]
-pub async fn psb_get_protocols(api_key: String, proxy_type: String, pool: String) -> Result<serde_json::Value, String> {
+pub async fn psb_get_protocols(api_key: String, pool: String) -> Result<serde_json::Value, String> {
     let client = ProxyApiClient::new();
     let result = client
-        .psb_get_protocols(&api_key, &proxy_type, &pool)
+        .psb_get_protocols(&api_key, &pool)
         .await
         .map_err(|e| format!("Failed to get protocols: {}", e))?;
     
@@ -561,13 +579,12 @@ pub async fn psb_get_protocols(api_key: String, proxy_type: String, pool: String
 #[tauri::command]
 pub async fn psb_generate_proxy_list(
     api_key: String,
-    proxy_type: String,
     pool: String,
     params: serde_json::Value,
 ) -> Result<Vec<String>, String> {
     let client = ProxyApiClient::new();
     client
-        .psb_generate_proxy_list(&api_key, &proxy_type, &pool, params)
+        .psb_generate_proxy_list(&api_key, &pool, params)
         .await
         .map_err(|e| format!("Failed to generate proxy list: {}", e))
 }
@@ -575,14 +592,13 @@ pub async fn psb_generate_proxy_list(
 #[tauri::command]
 pub async fn psb_add_whitelist_ip(
     api_key: String,
-    proxy_type: String,
     pool: String,
     ip: String,
     sub_user_id: Option<u32>,
 ) -> Result<String, String> {
     let client = ProxyApiClient::new();
     client
-        .psb_add_whitelist_ip(&api_key, &proxy_type, &pool, &ip, sub_user_id)
+        .psb_add_whitelist_ip(&api_key, &pool, &ip, sub_user_id)
         .await
         .map_err(|e| format!("Failed to add IP to whitelist: {}", e))
 }
@@ -590,13 +606,12 @@ pub async fn psb_add_whitelist_ip(
 #[tauri::command]
 pub async fn psb_get_whitelist(
     api_key: String,
-    proxy_type: String,
     pool: String,
     sub_user_id: Option<u32>,
 ) -> Result<serde_json::Value, String> {
     let client = ProxyApiClient::new();
     client
-        .psb_get_whitelist(&api_key, &proxy_type, &pool, sub_user_id)
+        .psb_get_whitelist(&api_key, &pool, sub_user_id)
         .await
         .map_err(|e| format!("Failed to get whitelist: {}", e))
 }
@@ -604,14 +619,13 @@ pub async fn psb_get_whitelist(
 #[tauri::command]
 pub async fn psb_remove_whitelist_ip(
     api_key: String,
-    proxy_type: String,
     pool: String,
     ip: String,
     sub_user_id: Option<u32>,
 ) -> Result<String, String> {
     let client = ProxyApiClient::new();
     client
-        .psb_remove_whitelist_ip(&api_key, &proxy_type, &pool, &ip, sub_user_id)
+        .psb_remove_whitelist_ip(&api_key, &pool, &ip, sub_user_id)
         .await
         .map_err(|e| format!("Failed to remove IP from whitelist: {}", e))
 }

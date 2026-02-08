@@ -1,6 +1,6 @@
 {
   "name": "anticbrowser-tauri",
-  "version": "2.0.13",
+  "version": "2.0.14",
   "description": "Antic Browser - Advanced Anti-Detect Browser with Proxy Management",
   "type": "module",
   "scripts": {

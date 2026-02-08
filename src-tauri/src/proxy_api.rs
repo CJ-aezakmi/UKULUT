@@ -9,6 +9,70 @@ const CYBER_YOZH_BASE_URL: &str = "https://app.cyberyozh.com/api/v1/";
 const CYBER_YOZH_V2_URL: &str = "https://app.cyberyozh.com/api/v2/";
 const PSB_PROXY_BASE_URL: &str = "https://psbproxy.io/api/";
 
+/// Parse PSB API error response into user-friendly Russian message
+fn psb_parse_error(status: u16, body: &str) -> String {
+    // Try to extract "message" from JSON response
+    let msg = serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .and_then(|v| v.get("message").and_then(|m| m.as_str().map(String::from)))
+        .unwrap_or_default();
+
+    let msg_lower = msg.to_lowercase();
+    let body_lower = body.to_lowercase();
+
+    // Insufficient balance
+    if msg_lower.contains("insufficient") || msg_lower.contains("enough") 
+        || msg_lower.contains("balance") || body_lower.contains("insufficient")
+        || body_lower.contains("not enough") {
+        return "Недостаточно средств на балансе PSB. Пополните баланс в личном кабинете psbproxy.io".to_string();
+    }
+
+    // Auth errors
+    if status == 401 || msg_lower.contains("unauthorized") || msg_lower.contains("unauthenticated") {
+        return "Неверный или истёкший API ключ. Проверьте ключ в настройках PSB".to_string();
+    }
+
+    // Forbidden
+    if status == 403 || msg_lower.contains("forbidden") {
+        return "Доступ запрещён. Проверьте права API ключа".to_string();
+    }
+
+    // Not found
+    if status == 404 {
+        return "Продукт не найден. Возможно, тариф больше не доступен".to_string();
+    }
+
+    // Validation errors
+    if status == 422 || msg_lower.contains("validation") {
+        if !msg.is_empty() {
+            return format!("Ошибка валидации: {}", msg);
+        }
+        return "Ошибка валидации запроса".to_string();
+    }
+
+    // Rate limit
+    if status == 429 {
+        return "Слишком много запросов. Подождите немного и попробуйте снова".to_string();
+    }
+
+    // Server error
+    if status >= 500 {
+        return "Ошибка сервера PSB. Попробуйте позже".to_string();
+    }
+
+    // Payment required
+    if status == 402 || msg_lower.contains("payment") {
+        return "Требуется оплата. Пополните баланс на psbproxy.io".to_string();
+    }
+
+    // Fallback: return original message if available
+    if !msg.is_empty() {
+        return msg;
+    }
+
+    format!("Ошибка HTTP {} — {}", status, &body[..body.len().min(200)])
+}
+
 pub struct ProxyApiClient {
     client: Client,
 }
@@ -365,7 +429,7 @@ impl ProxyApiClient {
         let body = response.text().await.unwrap_or_default();
 
         if !status.is_success() {
-            return Err(anyhow!("Failed to get sub-users: HTTP {} - {}", status, body));
+            return Err(anyhow!("{}", psb_parse_error(status.as_u16(), &body)));
         }
 
         let data: PsbSubUsersListResponse = serde_json::from_str(&body)
@@ -392,7 +456,7 @@ impl ProxyApiClient {
         let resp_body = response.text().await.unwrap_or_default();
 
         if !status.is_success() {
-            return Err(anyhow!("Failed to create sub-user: HTTP {} - {}", status, resp_body));
+            return Err(anyhow!("{}", psb_parse_error(status.as_u16(), &resp_body)));
         }
 
         let sub_user: PsbSubUser = serde_json::from_str(&resp_body)
@@ -415,7 +479,7 @@ impl ProxyApiClient {
         let body = response.text().await.unwrap_or_default();
 
         if !status.is_success() {
-            return Err(anyhow!("SubUser not found: HTTP {} - {}", status, body));
+            return Err(anyhow!("{}", psb_parse_error(status.as_u16(), &body)));
         }
 
         let sub_user: PsbSubUser = serde_json::from_str(&body)
@@ -438,7 +502,7 @@ impl ProxyApiClient {
         let body = response.text().await.unwrap_or_default();
 
         if !status.is_success() {
-            return Err(anyhow!("SubUser not found: HTTP {} - {}", status, body));
+            return Err(anyhow!("{}", psb_parse_error(status.as_u16(), &body)));
         }
 
         let sub_user: PsbSubUser = serde_json::from_str(&body)
@@ -465,7 +529,7 @@ impl ProxyApiClient {
         let resp_body = response.text().await.unwrap_or_default();
 
         if !status.is_success() {
-            return Err(anyhow!("Failed to give traffic: HTTP {} - {}", status, resp_body));
+            return Err(anyhow!("{}", psb_parse_error(status.as_u16(), &resp_body)));
         }
 
         let sub_user: PsbSubUser = serde_json::from_str(&resp_body)
@@ -492,7 +556,7 @@ impl ProxyApiClient {
         let resp_body = response.text().await.unwrap_or_default();
 
         if !status.is_success() {
-            return Err(anyhow!("Failed to take traffic: HTTP {} - {}", status, resp_body));
+            return Err(anyhow!("{}", psb_parse_error(status.as_u16(), &resp_body)));
         }
 
         let sub_user: PsbSubUser = serde_json::from_str(&resp_body)
@@ -515,15 +579,86 @@ impl ProxyApiClient {
         let body = response.text().await.unwrap_or_default();
 
         if !status.is_success() {
-            return Err(anyhow!("Failed to delete sub-user: HTTP {} - {}", status, body));
+            return Err(anyhow!("{}", psb_parse_error(status.as_u16(), &body)));
         }
 
         Ok("SubUser deleted".to_string())
     }
 
+    /// Get available products (traffic packages) from PSB shop
+    pub async fn psb_get_products(&self) -> Result<serde_json::Value> {
+        let url = format!("{}products", PSB_PROXY_BASE_URL);
+        
+        let response = self.client
+            .get(&url)
+            .send()
+            .await?;
+
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+
+        if !status.is_success() {
+            return Err(anyhow!("Failed to get products: HTTP {} - {}", status, body));
+        }
+
+        let data: serde_json::Value = serde_json::from_str(&body)
+            .map_err(|e| anyhow!("Failed to parse products: {}", e))?;
+
+        Ok(data)
+    }
+
+    /// Buy a product (traffic package) from PSB shop
+    pub async fn psb_buy_product(&self, api_key: &str, product_id: u32, payment_type: &str) -> Result<serde_json::Value> {
+        let url = format!("{}products/{}/buy", PSB_PROXY_BASE_URL, product_id);
+
+        // Try JSON body first
+        let response = self.client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .header("Content-Type", "application/json")
+            .json(&serde_json::json!({ "payment_type": payment_type }))
+            .send()
+            .await?;
+
+        let status = response.status();
+        let resp_body = response.text().await.unwrap_or_default();
+
+        if status.is_success() {
+            let data: serde_json::Value = serde_json::from_str(&resp_body)
+                .unwrap_or(serde_json::json!({ "success": true, "message": "Traffic purchased" }));
+            return Ok(data);
+        }
+
+        // If JSON didn't work (422/400), try multipart form
+        if status.as_u16() == 422 || status.as_u16() == 400 {
+            let form = reqwest::multipart::Form::new()
+                .text("payment_type", payment_type.to_string());
+
+            let response2 = self.client
+                .post(&url)
+                .header("Authorization", format!("Bearer {}", api_key))
+                .multipart(form)
+                .send()
+                .await?;
+
+            let status2 = response2.status();
+            let resp_body2 = response2.text().await.unwrap_or_default();
+
+            if status2.is_success() {
+                let data: serde_json::Value = serde_json::from_str(&resp_body2)
+                    .unwrap_or(serde_json::json!({ "success": true, "message": "Traffic purchased" }));
+                return Ok(data);
+            }
+
+            return Err(anyhow!("{}", psb_parse_error(status2.as_u16(), &resp_body2)));
+        }
+
+        Err(anyhow!("{}", psb_parse_error(status.as_u16(), &resp_body)))
+    }
+
     /// Get pool data (hostnames, countries, formats, etc.)
-    pub async fn psb_get_pool_data(&self, api_key: &str, proxy_type: &str, pool: &str) -> Result<serde_json::Value> {
-        let url = format!("{}{}/{}", PSB_PROXY_BASE_URL, proxy_type, pool);
+    pub async fn psb_get_pool_data(&self, api_key: &str, pool: &str) -> Result<serde_json::Value> {
+        let url = format!("{}residential_proxy/{}", PSB_PROXY_BASE_URL, pool);
         
         let response = self.client
             .get(&url)
@@ -545,8 +680,8 @@ impl ProxyApiClient {
     }
 
     /// Get available countries for a pool
-    pub async fn psb_get_countries(&self, api_key: &str, proxy_type: &str, pool: &str) -> Result<Vec<PsbCountry>> {
-        let url = format!("{}{}/{}/available_countries", PSB_PROXY_BASE_URL, proxy_type, pool);
+    pub async fn psb_get_countries(&self, api_key: &str, pool: &str) -> Result<Vec<PsbCountry>> {
+        let url = format!("{}residential_proxy/{}/available_countries", PSB_PROXY_BASE_URL, pool);
         
         let response = self.client
             .get(&url)
@@ -563,8 +698,8 @@ impl ProxyApiClient {
     }
 
     /// Get available formats
-    pub async fn psb_get_formats(&self, api_key: &str, proxy_type: &str, pool: &str) -> Result<Vec<PsbFormat>> {
-        let url = format!("{}{}/{}/available_formats", PSB_PROXY_BASE_URL, proxy_type, pool);
+    pub async fn psb_get_formats(&self, api_key: &str, pool: &str) -> Result<Vec<PsbFormat>> {
+        let url = format!("{}residential_proxy/{}/available_formats", PSB_PROXY_BASE_URL, pool);
         
         let response = self.client
             .get(&url)
@@ -581,8 +716,8 @@ impl ProxyApiClient {
     }
 
     /// Get available hostnames
-    pub async fn psb_get_hostnames(&self, api_key: &str, proxy_type: &str, pool: &str) -> Result<Vec<PsbHostname>> {
-        let url = format!("{}{}/{}/available_hostnames", PSB_PROXY_BASE_URL, proxy_type, pool);
+    pub async fn psb_get_hostnames(&self, api_key: &str, pool: &str) -> Result<Vec<PsbHostname>> {
+        let url = format!("{}residential_proxy/{}/available_hostnames", PSB_PROXY_BASE_URL, pool);
         
         let response = self.client
             .get(&url)
@@ -599,8 +734,8 @@ impl ProxyApiClient {
     }
 
     /// Get available protocols
-    pub async fn psb_get_protocols(&self, api_key: &str, proxy_type: &str, pool: &str) -> Result<Vec<PsbProtocol>> {
-        let url = format!("{}{}/{}/available_protocols", PSB_PROXY_BASE_URL, proxy_type, pool);
+    pub async fn psb_get_protocols(&self, api_key: &str, pool: &str) -> Result<Vec<PsbProtocol>> {
+        let url = format!("{}residential_proxy/{}/available_protocols", PSB_PROXY_BASE_URL, pool);
         
         let response = self.client
             .get(&url)
@@ -617,8 +752,8 @@ impl ProxyApiClient {
     }
 
     /// Get available rotations
-    pub async fn psb_get_rotations(&self, api_key: &str, proxy_type: &str, pool: &str) -> Result<Vec<PsbRotation>> {
-        let url = format!("{}{}/{}/available_rotations", PSB_PROXY_BASE_URL, proxy_type, pool);
+    pub async fn psb_get_rotations(&self, api_key: &str, pool: &str) -> Result<Vec<PsbRotation>> {
+        let url = format!("{}residential_proxy/{}/available_rotations", PSB_PROXY_BASE_URL, pool);
         
         let response = self.client
             .get(&url)
@@ -638,11 +773,10 @@ impl ProxyApiClient {
     pub async fn psb_generate_proxy_list(
         &self,
         api_key: &str,
-        proxy_type: &str,
         pool: &str,
         params: serde_json::Value,
     ) -> Result<Vec<String>> {
-        let url = format!("{}{}/{}/generate-proxy-list", PSB_PROXY_BASE_URL, proxy_type, pool);
+        let url = format!("{}residential_proxy/{}/generate-proxy-list", PSB_PROXY_BASE_URL, pool);
         
         // Build multipart form from params
         let mut form = reqwest::multipart::Form::new();
@@ -692,11 +826,10 @@ impl ProxyApiClient {
     pub async fn psb_rotate_ip(
         &self,
         api_key: &str,
-        proxy_type: &str,
         pool: &str,
         port: u16,
     ) -> Result<String> {
-        let url = format!("{}{}/{}/rotate-ip", PSB_PROXY_BASE_URL, proxy_type, pool);
+        let url = format!("{}residential_proxy/{}/rotate-ip", PSB_PROXY_BASE_URL, pool);
         
         let form = reqwest::multipart::Form::new()
             .text("port", port.to_string());
@@ -722,12 +855,11 @@ impl ProxyApiClient {
     pub async fn psb_add_whitelist_ip(
         &self,
         api_key: &str,
-        proxy_type: &str,
         pool: &str,
         ip: &str,
         sub_user_id: Option<u32>,
     ) -> Result<String> {
-        let url = format!("{}{}/{}/whitelist-entries/add", PSB_PROXY_BASE_URL, proxy_type, pool);
+        let url = format!("{}residential_proxy/{}/whitelist-entries/add", PSB_PROXY_BASE_URL, pool);
         
         let mut form = reqwest::multipart::Form::new()
             .text("ip", ip.to_string());
@@ -757,11 +889,10 @@ impl ProxyApiClient {
     pub async fn psb_get_whitelist(
         &self,
         api_key: &str,
-        proxy_type: &str,
         pool: &str,
         sub_user_id: Option<u32>,
     ) -> Result<serde_json::Value> {
-        let mut url = format!("{}{}/{}/whitelist-entries", PSB_PROXY_BASE_URL, proxy_type, pool);
+        let mut url = format!("{}residential_proxy/{}/whitelist-entries", PSB_PROXY_BASE_URL, pool);
         
         if let Some(id) = sub_user_id {
             url.push_str(&format!("?subUser_id={}", id));
@@ -790,12 +921,11 @@ impl ProxyApiClient {
     pub async fn psb_remove_whitelist_ip(
         &self,
         api_key: &str,
-        proxy_type: &str,
         pool: &str,
         ip: &str,
         sub_user_id: Option<u32>,
     ) -> Result<String> {
-        let url = format!("{}{}/{}/whitelist-entries/remove", PSB_PROXY_BASE_URL, proxy_type, pool);
+        let url = format!("{}residential_proxy/{}/whitelist-entries/remove", PSB_PROXY_BASE_URL, pool);
         
         let mut form = reqwest::multipart::Form::new()
             .text("ip", ip.to_string());

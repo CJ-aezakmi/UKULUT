@@ -53,47 +53,24 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
     const [apiKey, setApiKey] = useState('');
     const [tab, setTab] = useState<'proxy' | 'whitelist' | 'subusers'>('proxy');
 
-    // Proxy type
-    type ProxyType = 'residential_proxy' | 'mobile_proxy' | 'datacenter_proxy';
-    const [proxyType, setProxyType] = useState<ProxyType>('residential_proxy');
-
-    const PROXY_TYPE_CONFIG: Record<ProxyType, { label: string; pools: { id: string; label: string; desc: string }[]; subUserPrefix: string; shopPath: string }> = {
-        residential_proxy: {
-            label: 'Residential',
-            pools: [
-                { id: 'pool-1', label: 'Pool-1', desc: 'Ротация через шлюз, по GB' },
-                { id: 'pool-2', label: 'Pool-2', desc: 'Статичные сессии' },
-            ],
-            subUserPrefix: 'residential-proxy',
-            shopPath: 'residential-proxy',
-        },
-        mobile_proxy: {
-            label: 'Mobile',
-            pools: [
-                { id: 'pool-1', label: 'Pool-1', desc: 'Мобильные прокси, ротация' },
-            ],
-            subUserPrefix: 'mobile-proxy',
-            shopPath: 'mobile-proxy',
-        },
-        datacenter_proxy: {
-            label: 'Datacenter',
-            pools: [
-                { id: 'pool-1', label: 'Pool-1', desc: 'Датацентр прокси' },
-            ],
-            subUserPrefix: 'datacenter-proxy',
-            shopPath: 'datacenter-proxy',
-        },
+    // Helper: clean Tauri error prefix for user-friendly display
+    const cleanError = (err: any): string => {
+        return String(err)
+            .replace(/^Failed to [^:]+:\s*/i, '')
+            .replace(/^Error:\s*/i, '');
     };
-
-    const currentConfig = PROXY_TYPE_CONFIG[proxyType];
 
     // SubUsers
     const [subUsers, setSubUsers] = useState<SubUser[]>([]);
     const [selectedSubUser, setSelectedSubUser] = useState<SubUser | null>(null);
     const [creatingSubUser, setCreatingSubUser] = useState(false);
 
-    // Pool data
-    const [pool, setPool] = useState('pool-1');
+    // Create SubUser dialog — product-based
+    const [pendingCreate, setPendingCreate] = useState<{ type: string; label: string } | null>(null);
+    const [products, setProducts] = useState<any[]>([]);
+    const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
+
+    // Pool data — derived from selected SubUser type
     const [countries, setCountries] = useState<Country[]>([]);
     const [formats, setFormats] = useState<Format[]>([]);
     const [hostnames, setHostnames] = useState<Hostname[]>([]);
@@ -113,6 +90,45 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
     const [whitelist, setWhitelist] = useState<any[]>([]);
     const [whitelistLoading, setWhitelistLoading] = useState(false);
 
+    // Helper: extract pool-N from SubUser type (e.g. "residential-proxy-pool-1" → "pool-1")
+    const getPoolFromSubUser = (su: SubUser | null): string => {
+        if (!su) return 'pool-1';
+        const match = su.type.match(/pool-(\d+)/);
+        return match ? `pool-${match[1]}` : 'pool-1';
+    };
+
+    // Helper: get human-readable label for SubUser type
+    const getSubUserTypeLabel = (type: string): string => {
+        if (type.includes('mobile')) return 'Mobile';
+        if (type.includes('datacenter')) return 'DC';
+        if (type.includes('pool-2')) return 'Res P2';
+        return 'Res P1';
+    };
+
+    // Helper: get badge color for SubUser type
+    const getSubUserBadgeClass = (type: string): string => {
+        if (type.includes('mobile')) return 'bg-emerald-500/10 text-emerald-400';
+        if (type.includes('datacenter')) return 'bg-violet-500/10 text-violet-400';
+        if (type.includes('pool-2')) return 'bg-teal-500/10 text-teal-400';
+        return 'bg-[#4a6cf7]/10 text-[#6b8aff]';
+    };
+
+    // Derived pool from selected SubUser
+    const activePool = getPoolFromSubUser(selectedSubUser);
+
+    // Open create dialog: load products filtered by type
+    const openCreateDialog = async (type: string, label: string) => {
+        setPendingCreate({ type, label });
+        setSelectedProductId(null);
+        try {
+            const allProducts = await api.psbGetProducts();
+            const filtered = allProducts.filter((p: any) => p.type === type && p.status);
+            setProducts(filtered);
+        } catch {
+            setProducts([]);
+        }
+    };
+
     // Load saved key
     useEffect(() => {
         if (isOpen && view === 'login') {
@@ -130,12 +146,12 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
         }
     }, [view]);
 
-    // Reload pool options when proxyType or pool changes
+    // Reload pool options when selected SubUser changes (pool may differ)
     useEffect(() => {
-        if (view === 'main') {
+        if (view === 'main' && selectedSubUser) {
             loadPoolOptions();
         }
-    }, [proxyType, pool]);
+    }, [selectedSubUser]);
 
     const loadSubUsers = useCallback(async () => {
         try {
@@ -153,10 +169,10 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
     const loadPoolOptions = useCallback(async () => {
         try {
             const [countriesData, formatsData, hostnamesData, protocolsData] = await Promise.all([
-                api.psbGetCountries(apiKey, proxyType, pool),
-                api.psbGetFormats(apiKey, proxyType, pool),
-                api.psbGetHostnames(apiKey, proxyType, pool),
-                api.psbGetProtocols(apiKey, proxyType, pool),
+                api.psbGetCountries(apiKey, activePool),
+                api.psbGetFormats(apiKey, activePool),
+                api.psbGetHostnames(apiKey, activePool),
+                api.psbGetProtocols(apiKey, activePool),
             ]);
             setCountries(countriesData);
             setFormats(formatsData);
@@ -165,7 +181,7 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
         } catch (error: any) {
             console.error('[PSB] Failed to load pool options:', error);
         }
-    }, [apiKey, proxyType, pool]);
+    }, [apiKey, activePool]);
 
     const loadMyIp = async () => {
         try {
@@ -180,7 +196,7 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
         if (!selectedSubUser) return;
         setWhitelistLoading(true);
         try {
-            const data = await api.psbGetWhitelist(apiKey, proxyType, pool, selectedSubUser.id);
+            const data = await api.psbGetWhitelist(apiKey, activePool, selectedSubUser.id);
             setWhitelist(Array.isArray(data) ? data : []);
         } catch (error: any) {
             console.error('[PSB] Failed to load whitelist:', error);
@@ -188,7 +204,7 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
         } finally {
             setWhitelistLoading(false);
         }
-    }, [apiKey, proxyType, pool, selectedSubUser]);
+    }, [apiKey, activePool, selectedSubUser]);
 
     useEffect(() => {
         if (tab === 'whitelist' && selectedSubUser) {
@@ -212,21 +228,45 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
             setView('main');
             showNotification('Успех', message, 'success');
         } catch (error: any) {
-            showNotification('Ошибка', `Не удалось подключиться: ${error}`, 'error');
+            showNotification('Ошибка', `Не удалось подключиться: ${cleanError(error)}`, 'error');
         } finally {
             setLoading(false);
         }
     };
 
-    const handleCreateSubUser = async (type: string) => {
+    const handleCreateSubUser = async () => {
+        if (!pendingCreate || !selectedProductId) {
+            showNotification('Ошибка', 'Выберите пакет трафика', 'warning');
+            return;
+        }
+        const product = products.find(p => p.id === selectedProductId);
+        if (!product) return;
+        const gb = parseFloat(product.data?.traffic || '0');
+
         setCreatingSubUser(true);
         try {
-            const result = await api.psbCreateSubUser(apiKey, type);
-            showNotification('Успех', `SubUser создан (ID: ${result.id})`, 'success');
+            // Step 1: Buy traffic package
+            showNotification('Покупка', `Покупка ${gb} ГБ трафика ($${product.price})...`, 'info');
+            await api.psbBuyProduct(apiKey, selectedProductId);
+
+            // Step 2: Create SubUser
+            const result = await api.psbCreateSubUser(apiKey, pendingCreate.type);
+
+            // Step 3: Give traffic to SubUser
+            try {
+                await api.psbGiveTraffic(apiKey, result.id, gb);
+                showNotification('Успех', `${gb} ГБ куплено, SubUser #${result.id} создан с трафиком`, 'success');
+            } catch (trafficError: any) {
+                showNotification('Внимание', `SubUser #${result.id} создан, трафик куплен, но не удалось выдать: ${cleanError(trafficError)}`, 'warning');
+            }
+
             await loadSubUsers();
             setSelectedSubUser(result);
+            setPendingCreate(null);
+            setSelectedProductId(null);
         } catch (error: any) {
-            showNotification('Ошибка', `Не удалось создать SubUser: ${error}`, 'error');
+            const msg = String(error).replace(/^Failed to buy product:\s*/i, '').replace(/^Failed to create sub-user:\s*/i, '');
+            showNotification('Ошибка', msg, 'error');
         } finally {
             setCreatingSubUser(false);
         }
@@ -240,7 +280,7 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
             if (selectedSubUser?.id === id) setSelectedSubUser(null);
             await loadSubUsers();
         } catch (error: any) {
-            showNotification('Ошибка', error.toString(), 'error');
+            showNotification('Ошибка', cleanError(error), 'error');
         }
     };
 
@@ -263,11 +303,11 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
             if (selectedCountry) {
                 params.location = selectedCountry;
             }
-            const proxies = await api.psbGenerateProxyList(apiKey, proxyType, pool, params);
+            const proxies = await api.psbGenerateProxyList(apiKey, activePool, params);
             setGeneratedProxies(proxies);
             showNotification('Успех', `Сгенерировано ${proxies.length} прокси`, 'success');
         } catch (error: any) {
-            showNotification('Ошибка', `Генерация не удалась: ${error}`, 'error');
+            showNotification('Ошибка', `Генерация не удалась: ${cleanError(error)}`, 'error');
         } finally {
             setLoading(false);
         }
@@ -289,7 +329,7 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
             showNotification('Успех', `Импортировано ${imported} из ${generatedProxies.length} прокси`, 'success');
             onProxiesImported();
         } catch (error: any) {
-            showNotification('Ошибка', error.toString(), 'error');
+            showNotification('Ошибка', cleanError(error), 'error');
         } finally {
             setLoading(false);
         }
@@ -299,11 +339,11 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
         if (!myIp || !selectedSubUser) return;
         setLoading(true);
         try {
-            await api.psbAddWhitelistIp(apiKey, proxyType, pool, myIp, selectedSubUser.id);
+            await api.psbAddWhitelistIp(apiKey, activePool, myIp, selectedSubUser.id);
             showNotification('Успех', 'IP добавлен в whitelist', 'success');
             await loadWhitelist();
         } catch (error: any) {
-            showNotification('Ошибка', error.toString(), 'error');
+            showNotification('Ошибка', cleanError(error), 'error');
         } finally {
             setLoading(false);
         }
@@ -312,11 +352,11 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
     const handleRemoveFromWhitelist = async (ip: string) => {
         if (!selectedSubUser) return;
         try {
-            await api.psbRemoveWhitelistIp(apiKey, proxyType, pool, ip, selectedSubUser.id);
+            await api.psbRemoveWhitelistIp(apiKey, activePool, ip, selectedSubUser.id);
             showNotification('Успех', 'IP удален из whitelist', 'success');
             await loadWhitelist();
         } catch (error: any) {
-            showNotification('Ошибка', error.toString(), 'error');
+            showNotification('Ошибка', cleanError(error), 'error');
         }
     };
 
@@ -375,7 +415,7 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
                             <h2 className="text-[15px] font-semibold text-white leading-tight">PSB Proxy</h2>
                             {view === 'main' && selectedSubUser ? (
                                 <p className="text-xs text-gray-500 mt-0.5">
-                                    {currentConfig.label} &middot; SubUser #{selectedSubUser.id} &middot; {getTrafficValue(selectedSubUser.data.traffic_available)} GB
+                                    {getSubUserTypeLabel(selectedSubUser.type)} &middot; SubUser #{selectedSubUser.id} &middot; {getTrafficValue(selectedSubUser.data.traffic_available)} GB
                                 </p>
                             ) : view === 'login' ? (
                                 <p className="text-xs text-gray-500 mt-0.5">Подключение к сервису</p>
@@ -386,7 +426,7 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
                         {view === 'main' && (
                             <>
                                 <button
-                                    onClick={() => openExternal(`https://psbproxy.io/account/shop/${currentConfig.shopPath}/${pool}`)}
+                                    onClick={() => openExternal('https://psbproxy.io/account')}
                                     className="px-2.5 py-1.5 text-[11px] text-gray-500 hover:text-white hover:bg-white/5 rounded-md transition-all"
                                 >
                                     Купить трафик
@@ -445,8 +485,8 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
                                 </button>
                                 <p className="text-[11px] text-gray-600 text-center leading-relaxed">
                                     Ключ можно получить в{' '}
-                                    <button onClick={() => openExternal('https://psbproxy.io/account/partnership')} className="text-[#4a6cf7] hover:text-[#6b8aff] transition-colors">
-                                        разделе Партнерство
+                                    <button onClick={() => openExternal('http://psbproxy.io/?utm_source=partner&utm_medium=soft&utm_term=antic&utm_campaign=openincognito')} className="text-[#4a6cf7] hover:text-[#6b8aff] transition-colors">
+                                        разделе API
                                     </button>
                                 </p>
                             </div>
@@ -470,16 +510,17 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
                                         </p>
                                         <div className="flex gap-2">
                                             <button
-                                                onClick={() => handleCreateSubUser(`${currentConfig.subUserPrefix}-${pool}`)}
-                                                disabled={creatingSubUser}
-                                                className="px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 rounded-md text-xs font-medium transition-colors disabled:opacity-50 border border-amber-500/20"
+                                                onClick={() => setTab('subusers')}
+                                                className="px-3.5 py-1.5 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 rounded-md text-xs font-medium transition-colors border border-amber-500/20 flex items-center gap-1.5"
                                             >
-                                                {creatingSubUser ? 'Создание...' : 'Создать SubUser'}
+                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                                                Создать SubUser
                                             </button>
                                             <button
-                                                onClick={() => openExternal(`https://psbproxy.io/account/shop/${currentConfig.shopPath}/${pool}`)}
-                                                className="px-3 py-1.5 text-amber-400/70 hover:text-amber-300 rounded-md text-xs transition-colors"
+                                                onClick={() => openExternal('https://psbproxy.io/account')}
+                                                className="px-3.5 py-1.5 text-amber-400/70 hover:text-amber-300 rounded-md text-xs transition-colors flex items-center gap-1.5"
                                             >
+                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" /></svg>
                                                 Купить трафик
                                             </button>
                                         </div>
@@ -487,57 +528,8 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
                                 </div>
                             )}
 
-                            {/* Proxy Type Selector */}
-                            <div className="px-6 pt-4 pb-0">
-                                <label className="block text-[10px] font-semibold text-gray-600 mb-1.5 uppercase tracking-wider">Тип прокси</label>
-                                <div className="flex gap-1 mb-3">
-                                    {(Object.entries(PROXY_TYPE_CONFIG) as [ProxyType, typeof currentConfig][]).map(([key, cfg]) => (
-                                        <button
-                                            key={key}
-                                            onClick={() => {
-                                                setProxyType(key);
-                                                setPool(cfg.pools[0].id);
-                                                setGeneratedProxies([]);
-                                                setSelectedCountry('');
-                                                setCountrySearch('');
-                                            }}
-                                            className={`flex-1 py-2 rounded-lg text-[12px] font-semibold transition-all border ${
-                                                proxyType === key
-                                                    ? key === 'residential_proxy'
-                                                        ? 'bg-[#4a6cf7]/10 border-[#4a6cf7]/30 text-[#6b8aff]'
-                                                        : key === 'mobile_proxy'
-                                                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                                                        : 'bg-violet-500/10 border-violet-500/30 text-violet-400'
-                                                    : 'bg-[#111] border-[#222] text-gray-500 hover:text-gray-300 hover:border-[#333]'
-                                            }`}
-                                        >
-                                            {cfg.label}
-                                        </button>
-                                    ))}
-                                </div>
-                                {/* Pool Selector */}
-                                {currentConfig.pools.length > 1 && (
-                                    <div className="flex gap-1 mb-3">
-                                        {currentConfig.pools.map(p => (
-                                            <button
-                                                key={p.id}
-                                                onClick={() => { setPool(p.id); setGeneratedProxies([]); }}
-                                                className={`flex-1 py-1.5 rounded-md text-[11px] font-medium transition-all border ${
-                                                    pool === p.id
-                                                        ? 'bg-[#1e1e1e] border-[#333] text-white'
-                                                        : 'bg-transparent border-[#222] text-gray-500 hover:text-gray-300'
-                                                }`}
-                                                title={p.desc}
-                                            >
-                                                {p.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-
                             {/* Tabs */}
-                            <div className="px-6 pt-1 pb-0">
+                            <div className="px-6 pt-4 pb-0">
                                 <div className="flex gap-0.5 bg-[#111] p-1 rounded-lg">
                                     {([
                                         ['proxy', 'Генератор', 'M13 10V3L4 14h7v7l9-11h-7z'],
@@ -816,30 +808,135 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
                                 {/* ===== SUBUSERS TAB ===== */}
                                 {tab === 'subusers' && (
                                     <div className="space-y-4">
-                                        <div className="flex gap-2">
-                                            {currentConfig.pools.map((p, idx) => (
+                                        <div className="flex flex-wrap gap-2 justify-center">
+                                            {([
+                                                {
+                                                    type: 'residential-proxy-pool-1',
+                                                    label: 'Res Pool-1',
+                                                    icon: (
+                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5a17.92 17.92 0 01-8.716-2.247m0 0A8.966 8.966 0 013 12c0-1.264.26-2.466.733-3.559" /></svg>
+                                                    ),
+                                                    gradient: 'from-blue-500 to-indigo-600',
+                                                    glow: 'shadow-blue-500/25',
+                                                    desc: 'Ротация'
+                                                },
+                                                {
+                                                    type: 'residential-proxy-pool-2',
+                                                    label: 'Res Pool-2',
+                                                    icon: (
+                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>
+                                                    ),
+                                                    gradient: 'from-cyan-500 to-blue-600',
+                                                    glow: 'shadow-cyan-500/25',
+                                                    desc: 'Статик'
+                                                },
+                                                {
+                                                    type: 'mobile-proxy-pool-1',
+                                                    label: 'Mobile',
+                                                    icon: (
+                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" /></svg>
+                                                    ),
+                                                    gradient: 'from-emerald-400 to-teal-600',
+                                                    glow: 'shadow-emerald-500/25',
+                                                    desc: '4G/5G'
+                                                },
+                                                {
+                                                    type: 'datacenter-proxy-pool-1',
+                                                    label: 'Datacenter',
+                                                    icon: (
+                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" /></svg>
+                                                    ),
+                                                    gradient: 'from-violet-500 to-purple-700',
+                                                    glow: 'shadow-violet-500/25',
+                                                    desc: 'Быстрый'
+                                                },
+                                            ]).map(btn => (
                                                 <button
-                                                    key={p.id}
-                                                    onClick={() => handleCreateSubUser(`${currentConfig.subUserPrefix}-${p.id}`)}
+                                                    key={btn.type}
+                                                    onClick={() => openCreateDialog(btn.type, btn.label)}
                                                     disabled={creatingSubUser}
-                                                    className={`px-4 py-2 rounded-lg text-xs font-medium transition-all disabled:opacity-50 flex items-center gap-1.5 ${
-                                                        idx === 0
-                                                            ? 'bg-[#4a6cf7] hover:bg-[#3d5de0] text-white'
-                                                            : 'bg-[#1e1e1e] hover:bg-[#252525] text-gray-300 border border-[#2a2a2a]'
-                                                    }`}
+                                                    className={`group relative px-3.5 py-2 rounded-xl text-[11px] font-semibold text-white transition-all duration-200 disabled:opacity-40 flex items-center gap-1.5 bg-gradient-to-r ${btn.gradient} hover:shadow-lg ${btn.glow} hover:scale-[1.03] active:scale-[0.97]`}
                                                 >
-                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
-                                                    {creatingSubUser ? 'Создание...' : p.label}
+                                                    <span className="absolute inset-0 rounded-xl bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                    <span className="relative flex items-center gap-1.5">
+                                                        {btn.icon}
+                                                        <span className="flex flex-col items-start leading-none">
+                                                            <span>{btn.label}</span>
+                                                            <span className="text-[8px] font-normal opacity-70">{btn.desc}</span>
+                                                        </span>
+                                                    </span>
                                                 </button>
                                             ))}
                                             <button
                                                 onClick={loadSubUsers}
-                                                className="px-3 py-2 bg-[#1e1e1e] hover:bg-[#252525] text-gray-400 rounded-lg text-xs transition-all border border-[#2a2a2a] ml-auto"
+                                                className="px-2.5 py-2 bg-white/5 hover:bg-white/10 text-gray-400 hover:text-gray-200 rounded-xl text-xs transition-all border border-white/5 hover:border-white/10 ml-auto hover:rotate-180 duration-500"
                                                 title="Обновить"
                                             >
                                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                                             </button>
                                         </div>
+
+                                        {/* Create SubUser dialog */}
+                                        {pendingCreate && (
+                                            <div className="border border-[#2a2a2a] bg-[#141414] rounded-lg p-4 space-y-3">
+                                                <div className="flex items-center justify-between">
+                                                    <p className="text-sm text-gray-300 font-medium">
+                                                        Купить трафик + создать SubUser — <span className="text-[#6b8aff]">{pendingCreate.label}</span>
+                                                    </p>
+                                                    <button
+                                                        onClick={() => setPendingCreate(null)}
+                                                        className="text-gray-600 hover:text-gray-400 transition-colors"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                    </button>
+                                                </div>
+                                                {products.length === 0 ? (
+                                                    <p className="text-xs text-gray-500 py-2">Загрузка пакетов...</p>
+                                                ) : (
+                                                    <div className="grid grid-cols-2 gap-1.5">
+                                                        {products
+                                                            .sort((a: any, b: any) => parseFloat(a.data?.traffic || '0') - parseFloat(b.data?.traffic || '0'))
+                                                            .map((p: any) => {
+                                                            const gb = p.data?.traffic || '?';
+                                                            const pricePerGb = p.data?.price_per_gb || '?';
+                                                            const discount = p.data?.discount || 0;
+                                                            const isSelected = selectedProductId === p.id;
+                                                            return (
+                                                                <button
+                                                                    key={p.id}
+                                                                    onClick={() => setSelectedProductId(p.id)}
+                                                                    className={`px-3 py-2 rounded-lg text-left transition-all border ${
+                                                                        isSelected
+                                                                            ? 'bg-[#4a6cf7]/10 border-[#4a6cf7]/40 ring-1 ring-[#4a6cf7]/30'
+                                                                            : 'bg-[#0a0a0a] border-[#222] hover:border-[#333]'
+                                                                    }`}
+                                                                >
+                                                                    <div className="flex items-center justify-between">
+                                                                        <span className="text-sm text-white font-semibold">{gb} ГБ</span>
+                                                                        <span className="text-sm text-emerald-400 font-medium">${p.price}</span>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                                        <span className="text-[10px] text-gray-500">${pricePerGb}/ГБ</span>
+                                                                        {Number(discount) > 0 && (
+                                                                            <span className="text-[10px] text-amber-400">-{discount}%</span>
+                                                                        )}
+                                                                    </div>
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                                <button
+                                                    onClick={handleCreateSubUser}
+                                                    disabled={creatingSubUser || !selectedProductId}
+                                                    className="w-full px-4 py-2.5 bg-[#4a6cf7] hover:bg-[#3d5de0] text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                                >
+                                                    {creatingSubUser ? 'Покупка и создание...' : selectedProductId
+                                                        ? `Купить ${products.find(p => p.id === selectedProductId)?.data?.traffic || '?'} ГБ и создать SubUser ($${products.find(p => p.id === selectedProductId)?.price || '?'})`
+                                                        : 'Выберите пакет трафика'}
+                                                </button>
+                                            </div>
+                                        )}
 
                                         {subUsers.length === 0 ? (
                                             <div className="py-12 text-center">
@@ -876,13 +973,8 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
                                                                         <span className="text-sm text-white font-medium">
                                                                             {su.data.username || `SubUser #${su.id}`}
                                                                         </span>
-                                                                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                                                                            su.type.includes('mobile') ? 'bg-emerald-500/10 text-emerald-400'
-                                                                            : su.type.includes('datacenter') ? 'bg-violet-500/10 text-violet-400'
-                                                                            : su.type.includes('pool-1') ? 'bg-[#4a6cf7]/10 text-[#6b8aff]'
-                                                                            : 'bg-teal-500/10 text-teal-400'
-                                                                        }`}>
-                                                                            {su.type.includes('mobile') ? 'MOB' : su.type.includes('datacenter') ? 'DC' : ''}{su.type.includes('pool-1') ? ' POOL-1' : su.type.includes('pool-2') ? ' POOL-2' : ` ${su.type.split('-').pop()?.toUpperCase()}`}
+                                                                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${getSubUserBadgeClass(su.type)}`}>
+                                                                            {getSubUserTypeLabel(su.type)}
                                                                         </span>
                                                                         {isSelected && (
                                                                             <svg className="w-3.5 h-3.5 text-[#4a6cf7]" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
@@ -917,7 +1009,10 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
                                             <svg className="w-4 h-4 text-gray-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                             <p className="text-xs text-gray-500 leading-relaxed">
                                                 <span className="text-gray-400">SubUser</span> — подключение к пулу с отдельным балансом.{' '}
-                                                <span className="text-gray-400">{currentConfig.label}</span> — {currentConfig.pools.map(p => `${p.label}: ${p.desc}`).join('. ')}.
+                                                <span className="text-gray-400">Res Pool-1</span> — ротация, по GB.{' '}
+                                                <span className="text-gray-400">Res Pool-2</span> — статичные сессии.{' '}
+                                                <span className="text-gray-400">Mobile</span> — мобильные прокси.{' '}
+                                                <span className="text-gray-400">DC</span> — датацентр прокси.
                                             </p>
                                         </div>
                                     </div>
