@@ -225,7 +225,11 @@ async function downloadAndInstallApp() {
         // Install silently
         if (isNsis) {
             // NSIS installer: /S for silent, /D for install directory
-            const installCmd = `"${installerPath}" /S /D=${path.join(process.env.LOCALAPPDATA, 'Programs', 'Antic Browser')}`;
+            // IMPORTANT: Install to INSTALL_DIR (AnticBrowser\app\), NOT to Programs\Antic Browser\ 
+            // where the launcher itself lives (would conflict with running launcher exe)
+            const installTarget = INSTALL_DIR;
+            fs.mkdirSync(installTarget, { recursive: true });
+            const installCmd = `"${installerPath}" /S /D=${installTarget}`;
             await new Promise((resolve) => {
                 exec(installCmd, (error) => {
                     if (error) console.warn('[Launcher] NSIS warning:', error);
@@ -250,11 +254,11 @@ async function downloadAndInstallApp() {
         }
 
         if (!findInstalledExe()) {
-            // Retry with elevated privileges
+            // Retry with elevated privileges, still targeting INSTALL_DIR
             updateStatus('Требуются права администратора. Повторная установка...', 55);
             if (isNsis) {
                 await new Promise((resolve) => {
-                    const ps = `Start-Process '${installerPath}' -ArgumentList '/S' -Verb RunAs -Wait`;
+                    const ps = `Start-Process '${installerPath}' -ArgumentList '/S','/D=${INSTALL_DIR}' -Verb RunAs -Wait`;
                     exec(`powershell -Command "${ps}"`, () => resolve());
                 });
             } else {

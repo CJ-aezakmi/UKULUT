@@ -608,15 +608,20 @@ impl ProxyApiClient {
     }
 
     /// Buy a product (traffic package) from PSB shop
-    pub async fn psb_buy_product(&self, api_key: &str, product_id: u32, payment_type: &str) -> Result<serde_json::Value> {
+    /// amount = number of units to buy (e.g. amount=5 on a 1GB product = 5GB)
+    pub async fn psb_buy_product(&self, api_key: &str, product_id: u32, payment_type: &str, amount: u32) -> Result<serde_json::Value> {
         let url = format!("{}products/{}/buy", PSB_PROXY_BASE_URL, product_id);
 
         // Try JSON body first
+        let mut body = serde_json::json!({ "payment_type": payment_type });
+        if amount > 1 {
+            body["amount"] = serde_json::json!(amount);
+        }
         let response = self.client
             .post(&url)
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
-            .json(&serde_json::json!({ "payment_type": payment_type }))
+            .json(&body)
             .send()
             .await?;
 
@@ -631,8 +636,11 @@ impl ProxyApiClient {
 
         // If JSON didn't work (422/400), try multipart form
         if status.as_u16() == 422 || status.as_u16() == 400 {
-            let form = reqwest::multipart::Form::new()
+            let mut form = reqwest::multipart::Form::new()
                 .text("payment_type", payment_type.to_string());
+            if amount > 1 {
+                form = form.text("amount", amount.to_string());
+            }
 
             let response2 = self.client
                 .post(&url)

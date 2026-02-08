@@ -462,10 +462,10 @@ pub async fn psb_get_products() -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
-pub async fn psb_buy_product(api_key: String, product_id: u32, payment_type: String) -> Result<serde_json::Value, String> {
+pub async fn psb_buy_product(api_key: String, product_id: u32, payment_type: String, amount: Option<u32>) -> Result<serde_json::Value, String> {
     let client = ProxyApiClient::new();
     client
-        .psb_buy_product(&api_key, product_id, &payment_type)
+        .psb_buy_product(&api_key, product_id, &payment_type, amount.unwrap_or(1))
         .await
         .map_err(|e| format!("Failed to buy product: {}", e))
 }
