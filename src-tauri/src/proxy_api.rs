@@ -521,9 +521,9 @@ impl ProxyApiClient {
         Ok("SubUser deleted".to_string())
     }
 
-    /// Get pool-1 data (hostnames, countries, formats, etc.)
-    pub async fn psb_get_pool_data(&self, api_key: &str, pool: &str) -> Result<serde_json::Value> {
-        let url = format!("{}residential_proxy/{}", PSB_PROXY_BASE_URL, pool);
+    /// Get pool data (hostnames, countries, formats, etc.)
+    pub async fn psb_get_pool_data(&self, api_key: &str, proxy_type: &str, pool: &str) -> Result<serde_json::Value> {
+        let url = format!("{}{}/{}", PSB_PROXY_BASE_URL, proxy_type, pool);
         
         let response = self.client
             .get(&url)
@@ -545,8 +545,8 @@ impl ProxyApiClient {
     }
 
     /// Get available countries for a pool
-    pub async fn psb_get_countries(&self, api_key: &str, pool: &str) -> Result<Vec<PsbCountry>> {
-        let url = format!("{}residential_proxy/{}/available_countries", PSB_PROXY_BASE_URL, pool);
+    pub async fn psb_get_countries(&self, api_key: &str, proxy_type: &str, pool: &str) -> Result<Vec<PsbCountry>> {
+        let url = format!("{}{}/{}/available_countries", PSB_PROXY_BASE_URL, proxy_type, pool);
         
         let response = self.client
             .get(&url)
@@ -563,8 +563,8 @@ impl ProxyApiClient {
     }
 
     /// Get available formats
-    pub async fn psb_get_formats(&self, api_key: &str, pool: &str) -> Result<Vec<PsbFormat>> {
-        let url = format!("{}residential_proxy/{}/available_formats", PSB_PROXY_BASE_URL, pool);
+    pub async fn psb_get_formats(&self, api_key: &str, proxy_type: &str, pool: &str) -> Result<Vec<PsbFormat>> {
+        let url = format!("{}{}/{}/available_formats", PSB_PROXY_BASE_URL, proxy_type, pool);
         
         let response = self.client
             .get(&url)
@@ -581,8 +581,8 @@ impl ProxyApiClient {
     }
 
     /// Get available hostnames
-    pub async fn psb_get_hostnames(&self, api_key: &str, pool: &str) -> Result<Vec<PsbHostname>> {
-        let url = format!("{}residential_proxy/{}/available_hostnames", PSB_PROXY_BASE_URL, pool);
+    pub async fn psb_get_hostnames(&self, api_key: &str, proxy_type: &str, pool: &str) -> Result<Vec<PsbHostname>> {
+        let url = format!("{}{}/{}/available_hostnames", PSB_PROXY_BASE_URL, proxy_type, pool);
         
         let response = self.client
             .get(&url)
@@ -599,8 +599,8 @@ impl ProxyApiClient {
     }
 
     /// Get available protocols
-    pub async fn psb_get_protocols(&self, api_key: &str, pool: &str) -> Result<Vec<PsbProtocol>> {
-        let url = format!("{}residential_proxy/{}/available_protocols", PSB_PROXY_BASE_URL, pool);
+    pub async fn psb_get_protocols(&self, api_key: &str, proxy_type: &str, pool: &str) -> Result<Vec<PsbProtocol>> {
+        let url = format!("{}{}/{}/available_protocols", PSB_PROXY_BASE_URL, proxy_type, pool);
         
         let response = self.client
             .get(&url)
@@ -617,8 +617,8 @@ impl ProxyApiClient {
     }
 
     /// Get available rotations
-    pub async fn psb_get_rotations(&self, api_key: &str, pool: &str) -> Result<Vec<PsbRotation>> {
-        let url = format!("{}residential_proxy/{}/available_rotations", PSB_PROXY_BASE_URL, pool);
+    pub async fn psb_get_rotations(&self, api_key: &str, proxy_type: &str, pool: &str) -> Result<Vec<PsbRotation>> {
+        let url = format!("{}{}/{}/available_rotations", PSB_PROXY_BASE_URL, proxy_type, pool);
         
         let response = self.client
             .get(&url)
@@ -638,10 +638,11 @@ impl ProxyApiClient {
     pub async fn psb_generate_proxy_list(
         &self,
         api_key: &str,
+        proxy_type: &str,
         pool: &str,
         params: serde_json::Value,
     ) -> Result<Vec<String>> {
-        let url = format!("{}residential_proxy/{}/generate-proxy-list", PSB_PROXY_BASE_URL, pool);
+        let url = format!("{}{}/{}/generate-proxy-list", PSB_PROXY_BASE_URL, proxy_type, pool);
         
         // Build multipart form from params
         let mut form = reqwest::multipart::Form::new();
@@ -691,10 +692,11 @@ impl ProxyApiClient {
     pub async fn psb_rotate_ip(
         &self,
         api_key: &str,
+        proxy_type: &str,
         pool: &str,
         port: u16,
     ) -> Result<String> {
-        let url = format!("{}residential_proxy/{}/rotate-ip", PSB_PROXY_BASE_URL, pool);
+        let url = format!("{}{}/{}/rotate-ip", PSB_PROXY_BASE_URL, proxy_type, pool);
         
         let form = reqwest::multipart::Form::new()
             .text("port", port.to_string());
@@ -720,11 +722,12 @@ impl ProxyApiClient {
     pub async fn psb_add_whitelist_ip(
         &self,
         api_key: &str,
+        proxy_type: &str,
         pool: &str,
         ip: &str,
         sub_user_id: Option<u32>,
     ) -> Result<String> {
-        let url = format!("{}residential_proxy/{}/whitelist-entries/add", PSB_PROXY_BASE_URL, pool);
+        let url = format!("{}{}/{}/whitelist-entries/add", PSB_PROXY_BASE_URL, proxy_type, pool);
         
         let mut form = reqwest::multipart::Form::new()
             .text("ip", ip.to_string());
@@ -754,10 +757,11 @@ impl ProxyApiClient {
     pub async fn psb_get_whitelist(
         &self,
         api_key: &str,
+        proxy_type: &str,
         pool: &str,
         sub_user_id: Option<u32>,
     ) -> Result<serde_json::Value> {
-        let mut url = format!("{}residential_proxy/{}/whitelist-entries", PSB_PROXY_BASE_URL, pool);
+        let mut url = format!("{}{}/{}/whitelist-entries", PSB_PROXY_BASE_URL, proxy_type, pool);
         
         if let Some(id) = sub_user_id {
             url.push_str(&format!("?subUser_id={}", id));
@@ -786,11 +790,12 @@ impl ProxyApiClient {
     pub async fn psb_remove_whitelist_ip(
         &self,
         api_key: &str,
+        proxy_type: &str,
         pool: &str,
         ip: &str,
         sub_user_id: Option<u32>,
     ) -> Result<String> {
-        let url = format!("{}residential_proxy/{}/whitelist-entries/remove", PSB_PROXY_BASE_URL, pool);
+        let url = format!("{}{}/{}/whitelist-entries/remove", PSB_PROXY_BASE_URL, proxy_type, pool);
         
         let mut form = reqwest::multipart::Form::new()
             .text("ip", ip.to_string());
