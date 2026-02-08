@@ -150,6 +150,14 @@ export async function psbCreateSubUser(apiKey: string, subType: string): Promise
     return await invoke('psb_create_sub_user', { apiKey, subType });
 }
 
+export async function psbGetProducts(): Promise<any[]> {
+    return await invoke('psb_get_products');
+}
+
+export async function psbBuyProduct(apiKey: string, productId: number, paymentType: string = 'balance'): Promise<any> {
+    return await invoke('psb_buy_product', { apiKey, productId, paymentType });
+}
+
 export async function psbGetBasicSubUser(apiKey: string, subType: string): Promise<any> {
     return await invoke('psb_get_basic_sub_user', { apiKey, subType });
 }
@@ -170,50 +178,47 @@ export async function psbDeleteSubUser(apiKey: string, subUserId: number): Promi
     return await invoke('psb_delete_sub_user', { apiKey, subUserId });
 }
 
-export async function psbGetPoolData(apiKey: string, proxyType: string, pool: string): Promise<any> {
-    return await invoke('psb_get_pool_data', { apiKey, proxyType, pool });
+export async function psbGetPoolData(apiKey: string, pool: string): Promise<any> {
+    return await invoke('psb_get_pool_data', { apiKey, pool });
 }
 
-export async function psbGetCountries(apiKey: string, proxyType: string, pool: string): Promise<any[]> {
-    return await invoke('psb_get_countries', { apiKey, proxyType, pool });
+export async function psbGetCountries(apiKey: string, pool: string): Promise<any[]> {
+    return await invoke('psb_get_countries', { apiKey, pool });
 }
 
-export async function psbGetFormats(apiKey: string, proxyType: string, pool: string): Promise<any[]> {
-    return await invoke('psb_get_formats', { apiKey, proxyType, pool });
+export async function psbGetFormats(apiKey: string, pool: string): Promise<any[]> {
+    return await invoke('psb_get_formats', { apiKey, pool });
 }
 
-export async function psbGetHostnames(apiKey: string, proxyType: string, pool: string): Promise<any[]> {
-    return await invoke('psb_get_hostnames', { apiKey, proxyType, pool });
+export async function psbGetHostnames(apiKey: string, pool: string): Promise<any[]> {
+    return await invoke('psb_get_hostnames', { apiKey, pool });
 }
 
-export async function psbGetProtocols(apiKey: string, proxyType: string, pool: string): Promise<any[]> {
-    return await invoke('psb_get_protocols', { apiKey, proxyType, pool });
+export async function psbGetProtocols(apiKey: string, pool: string): Promise<any[]> {
+    return await invoke('psb_get_protocols', { apiKey, pool });
 }
 
-export async function psbGenerateProxyList(apiKey: string, proxyType: string, pool: string, params: any): Promise<string[]> {
-    return await invoke('psb_generate_proxy_list', { apiKey, proxyType, pool, params });
+export async function psbGenerateProxyList(apiKey: string, pool: string, params: any): Promise<string[]> {
+    return await invoke('psb_generate_proxy_list', { apiKey, pool, params });
 }
 
 export async function psbAddWhitelistIp(
     apiKey: string,
-    proxyType: string,
     pool: string,
     ip: string,
     subUserId?: number,
 ): Promise<string> {
     return await invoke('psb_add_whitelist_ip', {
         apiKey,
-        proxyType,
         pool,
         ip,
         subUserId: subUserId ?? null,
     });
 }
 
-export async function psbGetWhitelist(apiKey: string, proxyType: string, pool: string, subUserId?: number): Promise<any> {
+export async function psbGetWhitelist(apiKey: string, pool: string, subUserId?: number): Promise<any> {
     return await invoke('psb_get_whitelist', {
         apiKey,
-        proxyType,
         pool,
         subUserId: subUserId ?? null,
     });
@@ -221,14 +226,12 @@ export async function psbGetWhitelist(apiKey: string, proxyType: string, pool: s
 
 export async function psbRemoveWhitelistIp(
     apiKey: string,
-    proxyType: string,
     pool: string,
     ip: string,
     subUserId?: number,
 ): Promise<string> {
     return await invoke('psb_remove_whitelist_ip', {
         apiKey,
-        proxyType,
         pool,
         ip,
         subUserId: subUserId ?? null,
@@ -373,6 +376,8 @@ export const psb = {
     },
     getSubUsers: psbGetSubUsers,
     createSubUser: psbCreateSubUser,
+    getProducts: psbGetProducts,
+    buyProduct: psbBuyProduct,
     getBasicSubUser: psbGetBasicSubUser,
     getSubUser: psbGetSubUser,
     giveTraffic: psbGiveTraffic,
