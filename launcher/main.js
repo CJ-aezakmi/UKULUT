@@ -409,16 +409,21 @@ async function ensurePlaywrightRuntime() {
         updateStatus(`${action} Playwright до последней версии...`, 66);
 
         await new Promise((resolve, reject) => {
-            const cmd = `cmd /c "\"${NPM_CMD}\" install playwright@latest"`;
-            exec(cmd, { cwd: RUNTIME_DIR }, (error) => {
-                if (error) {
-                    console.error('[Launcher] Playwright install/update error:', error);
-                    reject(error);
+            const child = spawn(NPM_CMD, ['install', 'playwright@latest'], {
+                cwd: RUNTIME_DIR,
+                shell: true,
+                stdio: 'pipe'
+            });
+            child.on('close', (code) => {
+                if (code !== 0) {
+                    console.error(`[Launcher] Playwright install/update failed (code ${code})`);
+                    reject(new Error(`npm install playwright failed (code ${code})`));
                 } else {
                     console.log(`[Launcher] Playwright ${action.toLowerCase()} completed`);
                     resolve();
                 }
             });
+            child.on('error', reject);
         });
     }
 
@@ -434,17 +439,23 @@ async function ensurePlaywrightRuntime() {
         updateStatus(`${action} Chromium...`, 70);
         // Устанавливаем/обновляем браузер
         await new Promise((resolve, reject) => {
-            const cmd = `cmd /c "\"${NPM_CMD}\" exec -- playwright install chromium"`;
+            const playwrightCli = path.join(RUNTIME_NODE_MODULES, 'playwright', 'cli.js');
             const env = { ...process.env, PLAYWRIGHT_BROWSERS_PATH };
-            exec(cmd, { cwd: RUNTIME_DIR, env }, (error) => {
-                if (error) {
-                    console.error('[Launcher] Chromium install error:', error);
-                    reject(error);
+            const child = spawn(NODE_EXE, [playwrightCli, 'install', 'chromium'], {
+                cwd: RUNTIME_DIR,
+                env,
+                stdio: 'pipe'
+            });
+            child.on('close', (code) => {
+                if (code !== 0) {
+                    console.error(`[Launcher] Chromium install failed (code ${code})`);
+                    reject(new Error(`playwright install chromium failed (code ${code})`));
                 } else {
                     console.log('[Launcher] Chromium install completed');
                     resolve();
                 }
             });
+            child.on('error', reject);
         });
     }
 
