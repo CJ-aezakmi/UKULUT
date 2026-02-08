@@ -65,10 +65,9 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
     const [selectedSubUser, setSelectedSubUser] = useState<SubUser | null>(null);
     const [creatingSubUser, setCreatingSubUser] = useState(false);
 
-    // Create SubUser dialog — product-based
+    // Create SubUser dialog
     const [pendingCreate, setPendingCreate] = useState<{ type: string; label: string } | null>(null);
-    const [products, setProducts] = useState<any[]>([]);
-    const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
+    const [customGb, setCustomGb] = useState<string>('1');
 
     // Pool data — derived from selected SubUser type
     const [countries, setCountries] = useState<Country[]>([]);
@@ -101,32 +100,37 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
     const getSubUserTypeLabel = (type: string): string => {
         if (type.includes('mobile')) return 'Mobile';
         if (type.includes('datacenter')) return 'DC';
-        if (type.includes('pool-2')) return 'Res P2';
-        return 'Res P1';
+        return 'Residential';
     };
 
     // Helper: get badge color for SubUser type
     const getSubUserBadgeClass = (type: string): string => {
         if (type.includes('mobile')) return 'bg-emerald-500/10 text-emerald-400';
         if (type.includes('datacenter')) return 'bg-violet-500/10 text-violet-400';
-        if (type.includes('pool-2')) return 'bg-teal-500/10 text-teal-400';
         return 'bg-[#4a6cf7]/10 text-[#6b8aff]';
     };
 
     // Derived pool from selected SubUser
     const activePool = getPoolFromSubUser(selectedSubUser);
 
-    // Open create dialog: load products filtered by type
-    const openCreateDialog = async (type: string, label: string) => {
+    // Map SubUser type → base product ID (1 GB unit) for buying custom amounts
+    const getBaseProductId = (type: string): number => {
+        if (type.includes('mobile')) return 26;       // Mobile 1 GB = $3
+        if (type.includes('datacenter')) return 38;   // DC 1 GB = $1
+        return 1;                                      // Residential Pool-1 1 GB = $2
+    };
+
+    // Get price per GB for display
+    const getPricePerGb = (type: string): string => {
+        if (type.includes('mobile')) return '3.00';
+        if (type.includes('datacenter')) return '1.00';
+        return '2.00';
+    };
+
+    // Open create dialog
+    const openCreateDialog = (type: string, label: string) => {
         setPendingCreate({ type, label });
-        setSelectedProductId(null);
-        try {
-            const allProducts = await api.psbGetProducts();
-            const filtered = allProducts.filter((p: any) => p.type === type && p.status);
-            setProducts(filtered);
-        } catch {
-            setProducts([]);
-        }
+        setCustomGb('1');
     };
 
     // Load saved key
@@ -235,38 +239,40 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
     };
 
     const handleCreateSubUser = async () => {
-        if (!pendingCreate || !selectedProductId) {
-            showNotification('Ошибка', 'Выберите пакет трафика', 'warning');
+        if (!pendingCreate) return;
+        const gb = parseFloat(customGb);
+        if (!gb || gb <= 0) {
+            showNotification('Ошибка', 'Введите количество ГБ больше 0', 'warning');
             return;
         }
-        const product = products.find(p => p.id === selectedProductId);
-        if (!product) return;
-        const gb = parseFloat(product.data?.traffic || '0');
 
         setCreatingSubUser(true);
         try {
-            // Step 1: Buy traffic package
-            showNotification('Покупка', `Покупка ${gb} ГБ трафика ($${product.price})...`, 'info');
-            await api.psbBuyProduct(apiKey, selectedProductId);
+            const productId = getBaseProductId(pendingCreate.type);
+            const pricePerGb = getPricePerGb(pendingCreate.type);
+            const totalPrice = (gb * parseFloat(pricePerGb)).toFixed(2);
+
+            // Step 1: Buy traffic
+            showNotification('Покупка', `Покупка ${gb} ГБ ($${totalPrice})...`, 'info');
+            await api.psbBuyProduct(apiKey, productId, 'balance', gb);
 
             // Step 2: Create SubUser
+            showNotification('Создание', `Создание SubUser (${pendingCreate.label})...`, 'info');
             const result = await api.psbCreateSubUser(apiKey, pendingCreate.type);
 
             // Step 3: Give traffic to SubUser
             try {
                 await api.psbGiveTraffic(apiKey, result.id, gb);
-                showNotification('Успех', `${gb} ГБ куплено, SubUser #${result.id} создан с трафиком`, 'success');
+                showNotification('Успех', `SubUser #${result.id} создан, выдано ${gb} ГБ ($${totalPrice})`, 'success');
             } catch (trafficError: any) {
-                showNotification('Внимание', `SubUser #${result.id} создан, трафик куплен, но не удалось выдать: ${cleanError(trafficError)}`, 'warning');
+                showNotification('Внимание', `SubUser #${result.id} создан, ${gb} ГБ куплено, но не удалось выдать: ${cleanError(trafficError)}. Трафик на основном аккаунте.`, 'warning');
             }
 
             await loadSubUsers();
             setSelectedSubUser(result);
             setPendingCreate(null);
-            setSelectedProductId(null);
         } catch (error: any) {
-            const msg = String(error).replace(/^Failed to buy product:\s*/i, '').replace(/^Failed to create sub-user:\s*/i, '');
-            showNotification('Ошибка', msg, 'error');
+            showNotification('Ошибка', cleanError(error), 'error');
         } finally {
             setCreatingSubUser(false);
         }
@@ -812,23 +818,13 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
                                             {([
                                                 {
                                                     type: 'residential-proxy-pool-1',
-                                                    label: 'Res Pool-1',
+                                                    label: 'Residential',
                                                     icon: (
                                                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5a17.92 17.92 0 01-8.716-2.247m0 0A8.966 8.966 0 013 12c0-1.264.26-2.466.733-3.559" /></svg>
                                                     ),
                                                     gradient: 'from-blue-500 to-indigo-600',
                                                     glow: 'shadow-blue-500/25',
                                                     desc: 'Ротация'
-                                                },
-                                                {
-                                                    type: 'residential-proxy-pool-2',
-                                                    label: 'Res Pool-2',
-                                                    icon: (
-                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>
-                                                    ),
-                                                    gradient: 'from-cyan-500 to-blue-600',
-                                                    glow: 'shadow-cyan-500/25',
-                                                    desc: 'Статик'
                                                 },
                                                 {
                                                     type: 'mobile-proxy-pool-1',
@@ -881,7 +877,7 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
                                             <div className="border border-[#2a2a2a] bg-[#141414] rounded-lg p-4 space-y-3">
                                                 <div className="flex items-center justify-between">
                                                     <p className="text-sm text-gray-300 font-medium">
-                                                        Купить трафик + создать SubUser — <span className="text-[#6b8aff]">{pendingCreate.label}</span>
+                                                        Создать SubUser — <span className="text-[#6b8aff]">{pendingCreate.label}</span>
                                                     </p>
                                                     <button
                                                         onClick={() => setPendingCreate(null)}
@@ -890,50 +886,51 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
                                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                                                     </button>
                                                 </div>
-                                                {products.length === 0 ? (
-                                                    <p className="text-xs text-gray-500 py-2">Загрузка пакетов...</p>
-                                                ) : (
-                                                    <div className="grid grid-cols-2 gap-1.5">
-                                                        {products
-                                                            .sort((a: any, b: any) => parseFloat(a.data?.traffic || '0') - parseFloat(b.data?.traffic || '0'))
-                                                            .map((p: any) => {
-                                                            const gb = p.data?.traffic || '?';
-                                                            const pricePerGb = p.data?.price_per_gb || '?';
-                                                            const discount = p.data?.discount || 0;
-                                                            const isSelected = selectedProductId === p.id;
-                                                            return (
-                                                                <button
-                                                                    key={p.id}
-                                                                    onClick={() => setSelectedProductId(p.id)}
-                                                                    className={`px-3 py-2 rounded-lg text-left transition-all border ${
-                                                                        isSelected
-                                                                            ? 'bg-[#4a6cf7]/10 border-[#4a6cf7]/40 ring-1 ring-[#4a6cf7]/30'
-                                                                            : 'bg-[#0a0a0a] border-[#222] hover:border-[#333]'
-                                                                    }`}
-                                                                >
-                                                                    <div className="flex items-center justify-between">
-                                                                        <span className="text-sm text-white font-semibold">{gb} ГБ</span>
-                                                                        <span className="text-sm text-emerald-400 font-medium">${p.price}</span>
-                                                                    </div>
-                                                                    <div className="flex items-center gap-2 mt-0.5">
-                                                                        <span className="text-[10px] text-gray-500">${pricePerGb}/ГБ</span>
-                                                                        {Number(discount) > 0 && (
-                                                                            <span className="text-[10px] text-amber-400">-{discount}%</span>
-                                                                        )}
-                                                                    </div>
-                                                                </button>
-                                                            );
-                                                        })}
+                                                <div>
+                                                    <label className="block text-[11px] font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">Количество ГБ</label>
+                                                    <div className="flex gap-2">
+                                                        <input
+                                                            type="number"
+                                                            value={customGb}
+                                                            onChange={(e) => setCustomGb(e.target.value)}
+                                                            min={0.1}
+                                                            step={0.1}
+                                                            placeholder="Например: 1, 5, 10..."
+                                                            className="flex-1 px-3.5 py-2.5 bg-[#0f0f0f] border border-[#2a2a2a] rounded-lg text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#4a6cf7] focus:ring-1 focus:ring-[#4a6cf7]/20 transition-all"
+                                                        />
+                                                        <span className="flex items-center text-xs text-gray-500 px-2">ГБ</span>
                                                     </div>
-                                                )}
+                                                    <div className="flex gap-1.5 mt-2">
+                                                        {[1, 3, 5, 10, 25, 50].map(v => (
+                                                            <button
+                                                                key={v}
+                                                                onClick={() => setCustomGb(String(v))}
+                                                                className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all border ${
+                                                                    customGb === String(v)
+                                                                        ? 'bg-[#4a6cf7]/15 border-[#4a6cf7]/40 text-[#6b8aff]'
+                                                                        : 'bg-[#0a0a0a] border-[#222] text-gray-500 hover:border-[#333] hover:text-gray-300'
+                                                                }`}
+                                                            >
+                                                                {v} ГБ
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                    <p className="text-[10px] text-gray-600 mt-1.5">
+                                                        Цена: <span className="text-gray-400">${pendingCreate ? getPricePerGb(pendingCreate.type) : '?'}/ГБ</span>
+                                                        {customGb && parseFloat(customGb) > 0 && pendingCreate && (
+                                                            <> &middot; Итого: <span className="text-emerald-400">${(parseFloat(customGb) * parseFloat(getPricePerGb(pendingCreate.type))).toFixed(2)}</span></>
+                                                        )}
+                                                        {' '}&middot; Оплата с баланса PSB
+                                                    </p>
+                                                </div>
                                                 <button
                                                     onClick={handleCreateSubUser}
-                                                    disabled={creatingSubUser || !selectedProductId}
+                                                    disabled={creatingSubUser || !customGb || parseFloat(customGb) <= 0}
                                                     className="w-full px-4 py-2.5 bg-[#4a6cf7] hover:bg-[#3d5de0] text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                                                 >
-                                                    {creatingSubUser ? 'Покупка и создание...' : selectedProductId
-                                                        ? `Купить ${products.find(p => p.id === selectedProductId)?.data?.traffic || '?'} ГБ и создать SubUser ($${products.find(p => p.id === selectedProductId)?.price || '?'})`
-                                                        : 'Выберите пакет трафика'}
+                                                    {creatingSubUser ? 'Покупка и создание...' : customGb && parseFloat(customGb) > 0 && pendingCreate
+                                                        ? `Купить ${customGb} ГБ ($${(parseFloat(customGb) * parseFloat(getPricePerGb(pendingCreate.type))).toFixed(2)}) и создать SubUser`
+                                                        : 'Введите количество ГБ'}
                                                 </button>
                                             </div>
                                         )}
@@ -1009,10 +1006,9 @@ export default function PSBProxyModal({ isOpen, onClose, onProxiesImported }: PS
                                             <svg className="w-4 h-4 text-gray-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                             <p className="text-xs text-gray-500 leading-relaxed">
                                                 <span className="text-gray-400">SubUser</span> — подключение к пулу с отдельным балансом.{' '}
-                                                <span className="text-gray-400">Res Pool-1</span> — ротация, по GB.{' '}
-                                                <span className="text-gray-400">Res Pool-2</span> — статичные сессии.{' '}
+                                                <span className="text-gray-400">Residential</span> — ротация, по GB.{' '}
                                                 <span className="text-gray-400">Mobile</span> — мобильные прокси.{' '}
-                                                <span className="text-gray-400">DC</span> — датацентр прокси.
+                                                <span className="text-gray-400">DC</span> — датацентр прокси. Трафик выдаётся из баланса основного аккаунта.
                                             </p>
                                         </div>
                                     </div>

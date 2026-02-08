@@ -154,8 +154,8 @@ export async function psbGetProducts(): Promise<any[]> {
     return await invoke('psb_get_products');
 }
 
-export async function psbBuyProduct(apiKey: string, productId: number, paymentType: string = 'balance'): Promise<any> {
-    return await invoke('psb_buy_product', { apiKey, productId, paymentType });
+export async function psbBuyProduct(apiKey: string, productId: number, paymentType: string = 'balance', amount: number = 1): Promise<any> {
+    return await invoke('psb_buy_product', { apiKey, productId, paymentType, amount });
 }
 
 export async function psbGetBasicSubUser(apiKey: string, subType: string): Promise<any> {
