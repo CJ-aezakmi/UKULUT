@@ -273,7 +273,7 @@ export default function ProxiesPage() {
                                 e.preventDefault();
                                 openExternal('https://proxy-seller.com/?partner=EUJT00V88RVKU3');
                             }}
-                            className="text-sm text-gray-500 hover:text-blue-600 underline underline-offset-2 transition"
+                            className="text-sm font-semibold text-gray-600 hover:text-blue-600 underline underline-offset-2 transition"
                         >
                             PROXYSELLER
                         </button>
