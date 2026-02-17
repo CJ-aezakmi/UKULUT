@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNotification } from '../utils/notifications';
 import * as api from '../api';
 import { openExternal } from '../utils/external';
 import { tauriFetch } from '../utils/http';
+import type { CyberYozhShopItem, CyberYozhProxyItem } from '../types';
 
 interface CyberYozhModalProps {
     isOpen: boolean;
@@ -10,245 +11,377 @@ interface CyberYozhModalProps {
     onProxiesImported: () => void;
 }
 
-interface ShopProxy {
+type MainTab = 'mobile' | 'residential' | 'datacenter';
+type SubTab = 'dedicated' | 'shared';
+
+interface CardOption {
     id: string;
-    name: string;
-    country_code: string;
-    access_type: string;
-    category: string;
+    days: number;
     price: number;
-    currency: string;
-    stock_status: string;
-    traffic_gb: number;  // Трафик в GB
-    duration_days: number;  // Срок в днях
+    trafficGb: number;          // -1 = unlimited
+    stockStatus: string;
 }
 
-interface HistoryProxy {
-    id: string;
-    url: string;
-    connection_login: string;
-    connection_password: string;
-    connection_host: string;
-    connection_port: number;
-    public_ipaddress: string;
-    system_status: string;
-    expired: boolean;
-    geoip?: {
-        countryCode2?: string;
-        district?: string;
-    };
+interface CardGroup {
+    title: string;
+    countryCode: string;
+    resolvedMainTab: MainTab;
+    badge: { text: string; color: string } | null;
+    features: string[];
+    options: CardOption[];
 }
+
+// ────── helpers ──────
+
+function countryFlag(code: string): string {
+    if (!code || code.length < 2) return '🌍';
+    const cc = code.substring(0, 2).toUpperCase();
+    return String.fromCodePoint(...cc.split('').map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
+}
+
+/** Human‑readable option label like on the CyberYozh website */
+function optionLabel(opt: CardOption): string {
+    // Duration part
+    let dur: string;
+    if (opt.days <= 0) dur = '∞';
+    else if (opt.days === 1) dur = '1 День';
+    else if (opt.days <= 4) dur = `${opt.days} Дня`;
+    else if (opt.days < 30) dur = `${opt.days} Дней`;
+    else {
+        const m = Math.round(opt.days / 30);
+        if (m <= 1) dur = '1 Месяц';
+        else if (m <= 4) dur = `${m} Месяца`;
+        else dur = `${m} Месяцев`;
+    }
+    // Traffic part
+    const traf = opt.trafficGb < 0 ? '∞ GB' : `${opt.trafficGb} GB`;
+    return `${dur} / ${traf} / $${opt.price.toFixed(2)}`;
+}
+
+/** Classify an item into a MainTab based on proxy_category from API.
+ *  Known API values: "lte" (mobile), "datacenter_dedicated", "residential_static", "residential_rotating", etc.
+ */
+function resolveMainTab(item: CyberYozhShopItem): MainTab {
+    const cat = (item.proxy_category || '').toLowerCase().trim();
+
+    // Mobile: "lte", "mobile", "mobile_dedicated", "mobile_shared", "5g", "4g"
+    if (cat.includes('lte') || cat.includes('mobile') || cat.includes('5g') || cat.includes('4g')) {
+        return 'mobile';
+    }
+    // Residential: "residential_static", "residential_rotating", "residential_dedicated", "isp"
+    if (cat.includes('residential') || cat.includes('isp')) {
+        return 'residential';
+    }
+    // Datacenter: "datacenter_dedicated", "datacenter_shared", "datacenter"
+    if (cat.includes('datacenter')) {
+        return 'datacenter';
+    }
+
+    // Fallback: try to detect from title keywords
+    const title = (item.title || '').toLowerCase();
+    if (/5g|4g|lte|mobile|t-mobile|verizon|at&t|мобил/.test(title)) return 'mobile';
+    if (/residential|резидент|isp/.test(title)) return 'residential';
+    if (/datacenter|датацентр|дата.центр/.test(title)) return 'datacenter';
+
+    console.warn('[CyberYozh] Unknown proxy_category:', item.proxy_category, 'title:', item.title);
+    return 'datacenter'; // safe default for truly unknown
+}
+
+/** Classify into SubTab based on proxy_category.
+ *  "shared"/"rotating" → shared; everything else → dedicated.
+ */
+function resolveSubTab(item: CyberYozhShopItem): SubTab {
+    const cat = (item.proxy_category || '').toLowerCase().trim();
+    if (cat.includes('shared') || cat.includes('rotating')) return 'shared';
+    // Also check title for shared/rotating hints
+    const title = (item.title || '').toLowerCase();
+    if (title.includes('shared') || title.includes('rotating') || title.includes('общ') || title.includes('ротац')) return 'shared';
+    return 'dedicated';
+}
+
+/** Features differ by category — mirroring CyberYozh website exactly */
+function buildFeatures(main: MainTab, item: CyberYozhShopItem): string[] {
+    const unlimited = !item.traffic_limitation || item.traffic_limitation < 0;
+    switch (main) {
+        case 'mobile':
+            return [
+                'Dedicated Mobile Router',
+                'SOCKS5 / VPN with DNS',
+                'Manual IP Changing',
+                'High Trust Rate',
+                'Very High Speed + Low Ping',
+                'UDP Support',
+                unlimited ? 'Unlimited Traffic' : `${Math.round((item.traffic_limitation || 0) / 1024)} GB Traffic`,
+            ];
+        case 'residential':
+            return [
+                '24h Availability',
+                'Real ISP',
+                'Speed up to 150 Mbps',
+                'Low Ping',
+                'Supports SOCKS5 with UDP',
+                unlimited ? 'Unlimited Bandwidth' : `${Math.round((item.traffic_limitation || 0) / 1024)} GB Traffic`,
+                'Dedicated IP',
+            ];
+        case 'datacenter':
+        default:
+            return [
+                'Exclusive IP ownership',
+                'High-speed connectivity',
+                '99.9% uptime',
+                unlimited ? 'Unlimited bandwidth' : `${Math.round((item.traffic_limitation || 0) / 1024)} GB Traffic`,
+                (item.proxy_protocol || 'HTTP').toUpperCase(),
+            ];
+    }
+}
+
+/** Badge based on category — matches CyberYozh website colors */
+function resolveBadge(main: MainTab): { text: string; color: string } | null {
+    switch (main) {
+        case 'mobile': return { text: 'Premium', color: '#0059DF' };
+        case 'residential': return { text: 'Sale', color: '#FF3A34' };
+        default: return null;
+    }
+}
+
+// Labels for subtabs per main tab (matches CyberYozh website)
+const SUB_TAB_LABELS: Record<MainTab, Record<SubTab, string>> = {
+    mobile:      { dedicated: 'Выделенные',   shared: 'Общие'      },
+    residential: { dedicated: 'Статические',  shared: 'Ротационные' },
+    datacenter:  { dedicated: 'Выделенные',   shared: 'Общие'      },
+};
 
 export default function CyberYozhModal({ isOpen, onClose, onProxiesImported }: CyberYozhModalProps) {
     const { showNotification } = useNotification();
     const [view, setView] = useState<'login' | 'main' | 'shop' | 'import'>('login');
     const [apiKey, setApiKey] = useState('');
     const [balance, setBalance] = useState('0.00');
-    const [shopProxies, setShopProxies] = useState<ShopProxy[]>([]);
-    const [myProxies, setMyProxies] = useState<HistoryProxy[]>([]);
-    const [selectedProxies, setSelectedProxies] = useState<Set<string>>(new Set());
+    const [loading, setLoading] = useState(false);
 
-    // Фильтры для магазина
-    const [countryFilter, setCountryFilter] = useState('');
-    const [categoryFilter, setCategoryFilter] = useState('');
+    // Shop state
+    const [shopItems, setShopItems] = useState<CyberYozhShopItem[]>([]);
+    const [mainTab, setMainTab] = useState<MainTab>('mobile');
+    const [subTab, setSubTab] = useState<SubTab>('dedicated');
+    const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
+    const [buyingId, setBuyingId] = useState<string | null>(null);
+
+    // Import state
+    const [myProxies, setMyProxies] = useState<CyberYozhProxyItem[]>([]);
+    const [selectedProxies, setSelectedProxies] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         if (isOpen && view === 'login') {
             const saved = localStorage.getItem('cyberyozh_api_key');
-            if (saved) {
-                setApiKey(saved);
-            }
+            if (saved) setApiKey(saved);
         }
     }, [isOpen, view]);
+
+    // Group products into cards — group by parent category (group_title) so products become dropdown options
+    const cardGroups = useMemo(() => {
+        const filtered = shopItems.filter(item => {
+            const m = resolveMainTab(item);
+            const s = resolveSubTab(item);
+            return m === mainTab && s === subTab;
+        });
+
+        const groups: Record<string, CardGroup> = {};
+        for (const item of filtered) {
+            // Group by parent group title (set during Rust flatten),
+            // falling back to product title if group_title not available
+            const key = item.group_title || item.title || 'Unknown';
+            if (!groups[key]) {
+                const main = resolveMainTab(item);
+                const cc = item.location_country_code
+                    ? item.location_country_code.split(',')[0].trim()
+                    : '';
+                groups[key] = {
+                    title: item.group_title || item.title,
+                    countryCode: cc,
+                    resolvedMainTab: main,
+                    badge: resolveBadge(main),
+                    features: buildFeatures(main, item),
+                    options: [],
+                };
+            }
+            const trafficGb = !item.traffic_limitation || item.traffic_limitation < 0
+                ? -1
+                : Math.round(item.traffic_limitation / 1024);
+            groups[key].options.push({
+                id: item.id,
+                days: item.days || 30,
+                price: item.price_usd ? parseFloat(item.price_usd) : 0,
+                trafficGb,
+                stockStatus: item.stock_status || 'in_stock',
+            });
+        }
+
+        for (const g of Object.values(groups)) {
+            g.options.sort((a, b) => a.days - b.days || a.price - b.price);
+        }
+        return Object.values(groups);
+    }, [shopItems, mainTab, subTab]);
+
+    // Which tabs actually have products
+    const availableTabs = useMemo(() => {
+        const tabs: Record<MainTab, Record<SubTab, boolean>> = {
+            mobile: { dedicated: false, shared: false },
+            residential: { dedicated: false, shared: false },
+            datacenter: { dedicated: false, shared: false },
+        };
+        for (const item of shopItems) {
+            const m = resolveMainTab(item);
+            const s = resolveSubTab(item);
+            tabs[m][s] = true;
+        }
+        return tabs;
+    }, [shopItems]);
+
+    // Auto-select first available main tab (with products) when shop loads
+    useEffect(() => {
+        if (shopItems.length === 0) return;
+        const priority: MainTab[] = ['mobile', 'residential', 'datacenter'];
+        for (const m of priority) {
+            if (availableTabs[m].dedicated || availableTabs[m].shared) {
+                setMainTab(m);
+                setSubTab(availableTabs[m].dedicated ? 'dedicated' : 'shared');
+                return;
+            }
+        }
+    }, [shopItems, availableTabs]);
 
     const handleLogin = async () => {
         if (!apiKey.trim()) {
             showNotification('Ошибка', 'Введите API ключ', 'warning');
             return;
         }
-
-        console.log('[CyberYozh] Проверка API ключа...', apiKey.substring(0, 10) + '...');
+        setLoading(true);
         try {
-            // Баланс доступен только на v2
-            console.log('[CyberYozh] Отправка запроса на баланс...');
             const response = await tauriFetch('https://app.cyberyozh.com/api/v2/users/balance/', {
-                headers: {
-                    'X-Api-Key': apiKey,
-                    'User-Agent': 'Antic Browser v1.0.0'
-                }
+                headers: { 'X-Api-Key': apiKey, 'User-Agent': 'Antic Browser v1.0.0' },
             });
-            console.log('[CyberYozh] Ответ сервера:', response.status, response.statusText);
-
             if (!response.ok) {
-                if (response.status === 401 || response.status === 403) {
-                    showNotification('Ошибка', 'Неверный API ключ', 'error');
-                } else {
-                    showNotification('Ошибка', `Ошибка сервера: ${response.status}`, 'error');
-                }
+                showNotification('Ошибка',
+                    response.status === 401 || response.status === 403
+                        ? 'Неверный API ключ'
+                        : `Ошибка сервера: ${response.status}`,
+                    'error'
+                );
                 return;
             }
-
             const balanceText = await response.text();
             const balanceValue = balanceText.replace('$', '').trim();
             setBalance(balanceValue);
-
             localStorage.setItem('cyberyozh_api_key', apiKey);
             setView('main');
             showNotification('Успех', `API ключ проверен. Баланс: $${balanceValue}`, 'success');
         } catch (error: any) {
-            console.error('[CyberYozh] Ошибка API:', error);
-            console.error('[CyberYozh] Тип ошибки:', error.constructor.name);
-            console.error('[CyberYozh] Стек:', error.stack);
             showNotification('Ошибка', `Не удалось подключиться: ${error.message}`, 'error');
+        } finally {
+            setLoading(false);
         }
     };
 
     const loadShopProxies = async () => {
+        setLoading(true);
         try {
-            console.log('[CyberYozh] Загрузка магазина прокси...');
-
-            const data = await api.cyberyozhGetShopProxies(
-                apiKey,
-                undefined,
-                undefined
-            );
-
-            console.log('[CyberYozh] RAW DATA from Rust:', JSON.stringify(data.slice(0, 2), null, 2));
-            console.log('[CyberYozh] Получено прокси:', data.length);
-            console.log('[CyberYozh] Первый прокси:', data[0]);
-
-            // Преобразуем CyberYozhShopItem в ShopProxy
-            let allProxies: ShopProxy[] = data.map(item => {
-                // Извлекаем первый код страны из location_country_code
-                const countryCode = item.location_country_code ?
-                    item.location_country_code.split(',')[0].trim() : 'Global';
-
-                // Парсим цену из строки в число
-                const price = item.price_usd ? parseFloat(item.price_usd) : 0;
-
-                // Конвертируем трафик из MB в GB
-                const trafficGb = item.traffic_limitation ? Math.round(item.traffic_limitation / 1024) : 0;
-                const durationDays = item.days || 30;
-
-                console.log('[CyberYozh] Маппинг прокси:', {
-                    title: item.title,
-                    price_raw: item.price_usd,
-                    price_parsed: price,
-                    traffic_mb: item.traffic_limitation,
-                    traffic_gb: trafficGb,
-                    days: durationDays
-                });
-
-                return {
-                    id: item.id,
-                    name: item.title || 'Proxy',
-                    country_code: countryCode,
-                    access_type: item.proxy_category || item.proxy_protocol || 'http',
-                    category: '',
-                    price: isNaN(price) ? 0 : price,
-                    currency: 'USD',
-                    stock_status: item.stock_status || 'in_stock',
-                    traffic_gb: trafficGb,
-                    duration_days: durationDays
-                };
-            });
-
-            console.log('[CyberYozh] После маппинга, первый прокси:', allProxies[0]);
-
-            // Применяем фильтры на клиенте
-            if (countryFilter) {
-                allProxies = allProxies.filter(p => {
-                    // Поиск в location_country_code (список через запятую)
-                    const itemData = data.find(item => item.id === p.id);
-                    if (!itemData || !itemData.location_country_code) return false;
-
-                    const countries = itemData.location_country_code.split(',').map(c => c.trim().toUpperCase());
-                    return countries.includes(countryFilter.toUpperCase());
-                });
+            const data = await api.cyberyozhGetShopProxies(apiKey, undefined, undefined);
+            // Debug: dump unique proxy_category values and classification
+            const cats = new Map<string, { main: MainTab; sub: SubTab; count: number }>();
+            for (const item of data) {
+                const key = item.proxy_category || '(empty)';
+                if (!cats.has(key)) {
+                    cats.set(key, { main: resolveMainTab(item), sub: resolveSubTab(item), count: 0 });
+                }
+                cats.get(key)!.count++;
             }
-            if (categoryFilter) {
-                allProxies = allProxies.filter(p => {
-                    const category = categoryFilter.toLowerCase();
-                    const accessType = p.access_type.toLowerCase();
-
-                    // Поиск по access_type (например "residential_rotating")
-                    if (category === 'residential' && accessType.includes('residential')) return true;
-                    if (category === 'mobile' && accessType.includes('mobile')) return true;
-                    if (category === 'datacenter' && accessType.includes('datacenter')) return true;
-
-                    return false;
-                });
-            }
-
-            console.log('[CyberYozh] После фильтрации:', allProxies.length);
-            setShopProxies(allProxies);
+            console.log('[CyberYozh] === CATEGORY CLASSIFICATION ===');
+            cats.forEach((v, k) => console.log(`  proxy_category="${k}" → ${v.main}/${v.sub} (${v.count} items)`));
+            console.log(`[CyberYozh] Total: ${data.length} products`);
+            setShopItems(data);
         } catch (error: any) {
-            console.error('[CyberYozh] Ошибка загрузки магазина:', error);
-            showNotification('Ошибка', `Не удалось загрузить магазин прокси: ${error}`, 'error');
+            showNotification('Ошибка', `Не удалось загрузить магазин: ${error}`, 'error');
+        } finally {
+            setLoading(false);
         }
     };
 
     const loadMyProxies = async () => {
+        setLoading(true);
         try {
-            const response = await tauriFetch('https://app.cyberyozh.com/api/v1/proxies/history/', {
-                headers: {
-                    'X-Api-Key': apiKey,
-                    'User-Agent': 'Antic Browser v1.0.0'
-                }
-            });
-
-            const data = await response.json();
-            const proxiesList = Array.isArray(data) ? data : [];
-
-            // Фильтруем только активные и не истекшие
-            const activeProxies = proxiesList.filter((p: HistoryProxy) =>
-                p.system_status === 'active' && !p.expired
-            );
-
-            setMyProxies(activeProxies);
-        } catch (error) {
+            // Use proper Rust command that handles paginated API response and filtering
+            const proxies = await api.cyberyozhGetMyProxies(apiKey);
+            console.log('[CyberYozh] My proxies loaded:', proxies.length, proxies);
+            setMyProxies(proxies);
+        } catch (error: any) {
+            console.error('[CyberYozh] Failed to load my proxies:', error);
             showNotification('Ошибка', 'Не удалось загрузить список прокси', 'error');
+        } finally {
+            setLoading(false);
         }
     };
 
     const handleBuyProxy = async (proxyId: string) => {
+        setBuyingId(proxyId);
         try {
             const response = await tauriFetch('https://app.cyberyozh.com/api/v1/proxies/shop/buy_proxies/', {
                 method: 'POST',
                 headers: {
                     'X-Api-Key': apiKey,
                     'Content-Type': 'application/json',
-                    'User-Agent': 'Antic Browser v1.0.0'
+                    'User-Agent': 'Antic Browser v1.0.0',
                 },
-                body: JSON.stringify([{ id: proxyId, auto_renew: false }])
+                body: JSON.stringify([{ id: proxyId, auto_renew: false }]),
             });
-
             if (!response.ok) {
                 const error = await response.json();
                 throw new Error(error.message || error.detail || 'Ошибка покупки');
             }
-
             const result = await response.json();
-
+            console.log('[CyberYozh] Buy result:', result);
             if (Array.isArray(result) && result[0]) {
-                const status = result[0].status;
-                const message = result[0].message;
-
-                if (status === 'in_progress') {
-                    showNotification('Успех', 'Прокси успешно куплен!', 'success');
-                    // Обновляем баланс
+                if (result[0].status === 'in_progress') {
+                    showNotification('Успех', 'Прокси куплен! Ожидание активации...', 'success');
+                    
+                    // Update balance
                     const balanceResp = await tauriFetch('https://app.cyberyozh.com/api/v2/users/balance/', {
-                        headers: { 'X-Api-Key': apiKey, 'User-Agent': 'Antic Browser v1.0.0' }
+                        headers: { 'X-Api-Key': apiKey, 'User-Agent': 'Antic Browser v1.0.0' },
                     });
                     const balanceText = await balanceResp.text();
                     setBalance(balanceText.replace('$', '').trim());
+                    
+                    // Auto-import: wait a bit for the proxy to activate, then import all active
+                    showNotification('Импорт', 'Импортирую купленные прокси в приложение...', 'info');
+                    // Retry up to 3 times with delay to wait for proxy activation
+                    let imported: string[] = [];
+                    for (let attempt = 1; attempt <= 3; attempt++) {
+                        await new Promise(r => setTimeout(r, 3000 * attempt)); // 3s, 6s, 9s
+                        try {
+                            imported = await api.cyberyozhImportProxies(apiKey);
+                            if (imported.length > 0) break;
+                        } catch (e) {
+                            console.warn(`[CyberYozh] Import attempt ${attempt} failed:`, e);
+                        }
+                    }
+                    if (imported.length > 0) {
+                        showNotification('Успех', `Импортировано ${imported.length} прокси в приложение`, 'success');
+                        onProxiesImported();
+                    } else {
+                        showNotification('Инфо', 'Прокси куплен, но ещё активируется. Используйте "Импортировать мои прокси" позже.', 'warning');
+                    }
                 } else {
-                    throw new Error(message || 'Ошибка покупки');
+                    throw new Error(result[0].message || 'Ошибка покупки');
                 }
             }
         } catch (error: any) {
-            const friendlyMessage = translateErrorMessage(error.message);
-            showNotification('Ошибка', friendlyMessage, 'error');
+            const m: Record<string, string> = {
+                'Not enough money.': 'Недостаточно средств',
+                'Request was throttled.': 'Слишком много запросов',
+                'Invalid API Key': 'Неверный API ключ',
+                'Bad Request': 'Некорректный запрос',
+            };
+            showNotification('Ошибка', m[error.message] || error.message, 'error');
+        } finally {
+            setBuyingId(null);
         }
     };
 
@@ -257,18 +390,18 @@ export default function CyberYozhModal({ isOpen, onClose, onProxiesImported }: C
             showNotification('Предупреждение', 'Выберите прокси для импорта', 'warning');
             return;
         }
-
         try {
             let imported = 0;
             for (const proxyId of selectedProxies) {
                 const proxy = myProxies.find(p => p.id === proxyId);
                 if (proxy) {
                     const proxyStr = `http://${proxy.connection_login}:${proxy.connection_password}@${proxy.connection_host}:${proxy.connection_port}`;
+                    console.log('[CyberYozh] Importing proxy:', proxyStr);
                     try {
                         await api.addProxy(proxyStr);
                         imported++;
-                    } catch (err) {
-                        console.error('Ошибка добавления прокси:', err);
+                    } catch (e) {
+                        console.error('[CyberYozh] Failed to import proxy:', proxyStr, e);
                     }
                 }
             }
@@ -281,71 +414,82 @@ export default function CyberYozhModal({ isOpen, onClose, onProxiesImported }: C
         }
     };
 
-    const translateErrorMessage = (msg: string): string => {
-        const mapping: Record<string, string> = {
-            'Not enough money.': 'Недостаточно средств',
-            'Request was throttled.': 'Слишком много запросов',
-            'Invalid API Key': 'Неверный API ключ',
-            'Bad Request': 'Некорректный запрос',
-            'Unauthorized': 'Неавторизовано',
-            'Forbidden': 'Доступ запрещён'
-        };
-        return mapping[msg] || msg;
+    const handleImportAll = async () => {
+        setLoading(true);
+        try {
+            const imported = await api.cyberyozhImportProxies(apiKey);
+            if (imported.length > 0) {
+                showNotification('Успех', `Импортировано ${imported.length} прокси`, 'success');
+                onProxiesImported();
+            } else {
+                showNotification('Инфо', 'Нет активных прокси для импорта', 'warning');
+            }
+            setView('main');
+        } catch (error: any) {
+            showNotification('Ошибка', `Ошибка импорта: ${error.message}`, 'error');
+        } finally {
+            setLoading(false);
+        }
     };
 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
                 {/* Header */}
-                <div className="bg-black text-white px-6 py-4 flex justify-between items-center rounded-t-xl">
-                    <h2 className="text-xl font-bold">Proxy CyberYozh</h2>
-                    <button onClick={onClose} className="text-white hover:bg-gray-800 rounded p-1">
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="bg-gradient-to-r from-zinc-900 to-zinc-800 text-white px-6 py-4 flex justify-between items-center shrink-0">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center text-sm font-bold">CY</div>
+                        <div>
+                            <h2 className="text-lg font-bold">CyberYozh Proxy Shop</h2>
+                            {view !== 'login' && (
+                                <p className="text-xs text-zinc-400">
+                                    Баланс: <span className="text-green-400 font-semibold">${balance}</span>
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="text-zinc-400 hover:text-white transition rounded-lg p-1.5 hover:bg-white/10">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>
                     </button>
                 </div>
 
                 {/* Content */}
-                <div className="p-6">
+                <div className="flex-1 overflow-y-auto p-6">
+                    {/* ═══════════ LOGIN ═══════════ */}
                     {view === 'login' && (
-                        <div>
-                            <div className="bg-pink-50 border border-pink-200 rounded-lg p-4 mb-4">
-                                <p className="text-sm text-pink-800">
-                                    🎁 <strong>Получите бонусы при регистрации</strong>
+                        <div className="max-w-md mx-auto">
+                            <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 mb-6 text-center">
+                                <p className="text-sm text-purple-800">
+                                    🎁 <strong>Получите бонусы при регистрации на CyberYozh</strong>
                                 </p>
                             </div>
 
-                            <h3 className="text-lg font-semibold mb-4">Авторизация</h3>
+                            <h3 className="text-xl font-bold text-center mb-6">Авторизация</h3>
                             <input
                                 type="text"
                                 value={apiKey}
                                 onChange={(e) => setApiKey(e.target.value)}
-                                className="w-full border border-gray-300 rounded-lg px-4 py-3 mb-4 focus:ring-2 focus:ring-purple-500 focus:outline-none"
-                                placeholder="API Ключ CyberYozh"
+                                onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+                                className="w-full border border-gray-300 rounded-xl px-4 py-3 mb-4 focus:ring-2 focus:ring-purple-500 focus:outline-none text-sm"
+                                placeholder="Введите API ключ CyberYozh"
                             />
                             <div className="flex gap-3">
                                 <button
                                     onClick={handleLogin}
-                                    className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-lg font-medium"
+                                    disabled={loading}
+                                    className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white py-3 rounded-xl font-medium transition"
                                 >
-                                    Проверить API ключ
+                                    {loading ? 'Проверка...' : 'Войти'}
                                 </button>
                                 <button
-                                    onClick={async () => {
-                                        console.log('[CyberYozh] Открываю ссылку для получения API ключа (логин экран)...');
-                                        try {
-                                            await openExternal('https://app.cyberyozh.com/ru/?utm_source=antic_browser_soft');
-                                        } catch (err) {
-                                            console.error('[CyberYozh] Не удалось открыть ссылку:', err);
-                                            showNotification('Ошибка', 'Не удалось открыть ссылку', 'error');
-                                        }
-                                    }}
-                                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium flex items-center justify-center gap-1"
+                                    onClick={() => openExternal('https://app.cyberyozh.com/ru/?utm_source=antic_browser_soft')}
+                                    className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white py-3 rounded-xl font-medium transition flex items-center justify-center gap-2"
                                 >
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                                     </svg>
                                     Получить ключ
@@ -354,203 +498,271 @@ export default function CyberYozhModal({ isOpen, onClose, onProxiesImported }: C
                         </div>
                     )}
 
+                    {/* ═══════════ MAIN ═══════════ */}
                     {view === 'main' && (
-                        <div>
-                            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
-                                <p className="text-green-800 font-semibold">
-                                    💰 Баланс: ${balance}
-                                </p>
+                        <div className="max-w-md mx-auto">
+                            <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-6 text-center">
+                                <p className="text-green-800 font-bold text-lg">💰 Баланс: ${balance}</p>
                             </div>
 
                             <div className="space-y-3">
                                 <button
-                                    onClick={() => {
-                                        setView('shop');
-                                        loadShopProxies();
-                                    }}
-                                    className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-medium"
+                                    onClick={() => { setView('shop'); loadShopProxies(); }}
+                                    className="w-full bg-purple-600 hover:bg-purple-700 text-white py-4 rounded-xl font-semibold transition flex items-center justify-center gap-2"
                                 >
-                                    Создать прокси
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z" />
+                                    </svg>
+                                    Магазин прокси
                                 </button>
                                 <button
-                                    onClick={() => {
-                                        setView('import');
-                                        loadMyProxies();
-                                    }}
-                                    className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium"
+                                    onClick={() => { setView('import'); loadMyProxies(); }}
+                                    className="w-full bg-zinc-800 hover:bg-zinc-700 text-white py-4 rounded-xl font-semibold transition flex items-center justify-center gap-2"
                                 >
-                                    Импортировать прокси
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                    </svg>
+                                    Импортировать мои прокси
                                 </button>
                             </div>
 
-                            <div className="mt-4 text-center">
-                                <p className="text-sm text-green-600">
-                                    Промокод <strong>CYBERYOZH2025</strong> — скидка 10% при пополнении
+                            <div className="mt-6 text-center">
+                                <p className="text-sm text-purple-600">
+                                    Промокод <strong className="bg-purple-100 px-2 py-0.5 rounded">CYBERYOZH2025</strong> — скидка 10%
                                 </p>
                             </div>
                         </div>
                     )}
 
+                    {/* ═══════════ SHOP ═══════════ */}
                     {view === 'shop' && (
                         <div>
-                            <button onClick={() => setView('main')} className="text-blue-600 hover:underline mb-4 flex items-center gap-1">
-                                ← Назад
+                            {/* Back */}
+                            <button
+                                onClick={() => setView('main')}
+                                className="text-sm text-zinc-500 hover:text-zinc-800 mb-4 flex items-center gap-1 transition"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                </svg>
+                                Назад
                             </button>
 
-                            <h3 className="text-lg font-semibold mb-4">Магазин прокси CyberYozh</h3>
-
-                            {/* Фильтры */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-                                <select
-                                    value={countryFilter}
-                                    onChange={(e) => setCountryFilter(e.target.value)}
-                                    className="border border-gray-300 rounded-lg px-4 py-2"
-                                >
-                                    <option value="">Страна (ISO код)</option>
-                                    <option value="us">United States (US)</option>
-                                    <option value="ru">Russia (RU)</option>
-                                    <option value="de">Germany (DE)</option>
-                                    <option value="gb">United Kingdom (GB)</option>
-                                    <option value="fr">France (FR)</option>
-                                </select>
-
-                                <select
-                                    value={categoryFilter}
-                                    onChange={(e) => setCategoryFilter(e.target.value)}
-                                    className="border border-gray-300 rounded-lg px-4 py-2"
-                                >
-                                    <option value="">Категория</option>
-                                    <option value="residential">Residential</option>
-                                    <option value="mobile">Mobile</option>
-                                    <option value="datacenter">Datacenter</option>
-                                </select>
-
-                                <button
-                                    onClick={loadShopProxies}
-                                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
-                                >
-                                    Искать в магазине
-                                </button>
+                            {/* Main Tabs: Мобильные / Резидентские / Датацентр */}
+                            <div className="flex gap-1 bg-zinc-100 rounded-xl p-1 mb-4">
+                                {([
+                                    ['mobile', 'Мобильные'],
+                                    ['residential', 'Резидентские'],
+                                    ['datacenter', 'Датацентр'],
+                                ] as [MainTab, string][]).map(([key, label]) => (
+                                    <button
+                                        key={key}
+                                        onClick={() => setMainTab(key)}
+                                        className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition ${
+                                            mainTab === key
+                                                ? 'bg-white text-zinc-900 shadow-sm'
+                                                : 'text-zinc-500 hover:text-zinc-700'
+                                        }`}
+                                    >
+                                        {label}
+                                    </button>
+                                ))}
                             </div>
 
-                            {/* Список доступных прокси */}
-                            <div className="space-y-3 max-h-96 overflow-y-auto">
-                                <h4 className="font-semibold">Доступные прокси</h4>
-                                {shopProxies.length === 0 ? (
-                                    <p className="text-gray-500 text-center py-8">
-                                        Нет доступных прокси. Попробуйте изменить фильтры.
-                                    </p>
-                                ) : (
-                                    shopProxies.map(proxy => (
-                                        <div key={proxy.id} className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition">
-                                            <div className="flex items-start justify-between">
-                                                <div className="flex-1">
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                        <span className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white text-xs px-2 py-1 rounded font-bold">
-                                                            {proxy.country_code === 'Global' ? '🌍 Global' : proxy.country_code}
-                                                        </span>
-                                                        <span className="bg-gradient-to-r from-teal-500 to-emerald-600 text-white text-xs px-2 py-1 rounded">
-                                                            {proxy.access_type.replace('_', ' ')}
-                                                        </span>
-                                                    </div>
-                                                    <p className="font-medium text-sm mb-2">{proxy.name}</p>
+                            {/* Sub Tabs: Выделенные / Общие (or Ротационные for residential) */}
+                            <div className="flex gap-2 mb-6">
+                                {(['dedicated', 'shared'] as SubTab[]).map((key) => {
+                                    const hasItems = availableTabs[mainTab]?.[key];
+                                    const label = SUB_TAB_LABELS[mainTab][key];
+                                    return (
+                                        <button
+                                            key={key}
+                                            onClick={() => setSubTab(key)}
+                                            className={`px-5 py-2 text-sm font-medium rounded-lg border transition ${
+                                                subTab === key
+                                                    ? 'bg-zinc-900 text-white border-zinc-900'
+                                                    : hasItems
+                                                        ? 'bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400'
+                                                        : 'bg-zinc-50 text-zinc-300 border-zinc-100'
+                                            }`}
+                                        >
+                                            {label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
 
-                                                    <div className="flex gap-4 text-xs text-gray-600 mb-2">
-                                                        <div className="flex items-center gap-1">
-                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                            </svg>
-                                                            <span>{proxy.duration_days} дней ({Math.round(proxy.duration_days / 30)} мес.)</span>
-                                                        </div>
-                                                        <div className="flex items-center gap-1">
-                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                                                            </svg>
-                                                            <span>{proxy.traffic_gb} GB</span>
-                                                        </div>
-                                                    </div>
+                            {/* Loading spinner */}
+                            {loading && (
+                                <div className="text-center py-16">
+                                    <div className="inline-block w-8 h-8 border-4 border-zinc-200 border-t-purple-600 rounded-full animate-spin" />
+                                    <p className="mt-3 text-sm text-zinc-500">Загрузка...</p>
+                                </div>
+                            )}
 
-                                                    <div className="text-lg font-bold text-blue-600">
-                                                        ${proxy.price.toFixed(2)} {proxy.currency}
-                                                    </div>
+                            {/* Empty state */}
+                            {!loading && cardGroups.length === 0 && (
+                                <div className="text-center py-16 text-zinc-400">
+                                    <svg className="w-12 h-12 mx-auto mb-3 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                                    </svg>
+                                    <p className="text-lg font-medium mb-1">Нет доступных прокси</p>
+                                    <p className="text-sm">В этой категории пока нет товаров</p>
+                                </div>
+                            )}
+
+                            {/* Card grid */}
+                            {!loading && cardGroups.length > 0 && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    {cardGroups.map((group) => {
+                                        const selId = selectedOptions[group.title] || group.options[0]?.id;
+                                        const selOpt = group.options.find(o => o.id === selId) || group.options[0];
+                                        const outOfStock = selOpt?.stockStatus === 'out_of_stock';
+
+                                        return (
+                                            <div
+                                                key={group.title}
+                                                className="bg-white border border-zinc-200 rounded-xl overflow-hidden hover:border-zinc-300 hover:shadow-md transition-all flex flex-col"
+                                            >
+                                                {/* Card header: flag + title + badge */}
+                                                <div className="px-4 pt-4 pb-3 flex items-center gap-2.5">
+                                                    <span className="text-xl leading-none">{countryFlag(group.countryCode)}</span>
+                                                    <span className="font-semibold text-zinc-900 text-sm flex-1 truncate">{group.title}</span>
+                                                    {group.badge && (
+                                                        <span
+                                                            className="text-[11px] font-bold text-white px-2 py-0.5 rounded-md shrink-0"
+                                                            style={{ backgroundColor: group.badge.color }}
+                                                        >
+                                                            {group.badge.text}
+                                                        </span>
+                                                    )}
                                                 </div>
 
-                                                <button
-                                                    onClick={() => handleBuyProxy(proxy.id)}
-                                                    disabled={proxy.stock_status === 'out_of_stock'}
-                                                    className={`px-4 py-2 rounded-lg font-medium transition ${proxy.stock_status === 'out_of_stock'
-                                                            ? 'bg-gray-400 cursor-not-allowed text-white'
-                                                            : 'bg-green-600 hover:bg-green-700 text-white'
+                                                <hr className="border-zinc-100 mx-4" />
+
+                                                {/* Features list */}
+                                                <div className="px-4 py-3 flex-1">
+                                                    <ul className="space-y-1.5">
+                                                        {group.features.map((f, i) => (
+                                                            <li key={i} className="flex items-start gap-2 text-[13px] text-zinc-600">
+                                                                <span className="text-green-500 mt-px shrink-0">✓</span>
+                                                                {f}
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+
+                                                {/* Footer: dropdown + buy */}
+                                                <div className="px-4 pb-4 pt-2 flex items-center gap-2">
+                                                    <select
+                                                        value={selId}
+                                                        onChange={(e) =>
+                                                            setSelectedOptions(prev => ({ ...prev, [group.title]: e.target.value }))
+                                                        }
+                                                        className="flex-1 min-w-0 border border-zinc-200 rounded-lg px-2.5 py-2 text-[13px] bg-zinc-50 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                                                    >
+                                                        {group.options.map(opt => (
+                                                            <option key={opt.id} value={opt.id}>
+                                                                {optionLabel(opt)}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                    <button
+                                                        onClick={() => selOpt && handleBuyProxy(selOpt.id)}
+                                                        disabled={outOfStock || buyingId === selOpt?.id}
+                                                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition whitespace-nowrap ${
+                                                            outOfStock
+                                                                ? 'bg-zinc-200 text-zinc-400 cursor-not-allowed'
+                                                                : buyingId === selOpt?.id
+                                                                    ? 'bg-purple-400 text-white cursor-wait'
+                                                                    : 'bg-purple-600 hover:bg-purple-700 text-white'
                                                         }`}
-                                                >
-                                                    {proxy.stock_status === 'out_of_stock' ? 'Нет в наличии' : 'Купить'}
-                                                </button>
+                                                    >
+                                                        {outOfStock ? 'Нет' : buyingId === selOpt?.id ? '...' : 'Купить'}
+                                                    </button>
+                                                </div>
                                             </div>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </div>
                     )}
 
+                    {/* ═══════════ IMPORT ═══════════ */}
                     {view === 'import' && (
                         <div>
-                            <button onClick={() => setView('main')} className="text-blue-600 hover:underline mb-4 flex items-center gap-1">
-                                ← Назад
+                            <button
+                                onClick={() => setView('main')}
+                                className="text-sm text-zinc-500 hover:text-zinc-800 mb-4 flex items-center gap-1 transition"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                </svg>
+                                Назад
                             </button>
 
-                            <h3 className="text-lg font-semibold mb-4">Импорт прокси CyberYozh</h3>
+                            <h3 className="text-lg font-bold mb-4">Мои прокси</h3>
 
-                            <p className="text-sm text-gray-600 mb-4">
-                                Выберите прокси для импорта в Antic Browser:
-                            </p>
+                            {loading && (
+                                <div className="text-center py-12">
+                                    <div className="inline-block w-8 h-8 border-4 border-zinc-200 border-t-purple-600 rounded-full animate-spin" />
+                                </div>
+                            )}
 
-                            {myProxies.length === 0 ? (
-                                <div className="text-center py-8">
-                                    <p className="text-gray-500 mb-4">Нет доступных прокси. Купите прокси в магазине.</p>
+                            {!loading && myProxies.length === 0 && (
+                                <div className="text-center py-16">
+                                    <p className="text-zinc-400 mb-4">Нет активных прокси</p>
                                     <button
-                                        onClick={() => {
-                                            setView('shop');
-                                            loadShopProxies();
-                                        }}
-                                        className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg"
+                                        onClick={() => { setView('shop'); loadShopProxies(); }}
+                                        className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-xl font-medium transition"
                                     >
                                         Перейти в магазин
                                     </button>
                                 </div>
-                            ) : (
-                                <>
-                                    <button
-                                        onClick={handleImportSelected}
-                                        className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg mb-4"
-                                        disabled={selectedProxies.size === 0}
-                                    >
-                                        Импортировать выбранные ({selectedProxies.size})
-                                    </button>
+                            )}
 
-                                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                            {!loading && myProxies.length > 0 && (
+                                <>
+                                    <div className="flex gap-2 mb-4">
+                                        <button
+                                            onClick={handleImportAll}
+                                            className="bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-xl font-medium transition"
+                                        >
+                                            Импортировать все ({myProxies.length})
+                                        </button>
+                                        <button
+                                            onClick={handleImportSelected}
+                                            disabled={selectedProxies.size === 0}
+                                            className="bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white px-5 py-2.5 rounded-xl font-medium transition"
+                                        >
+                                            Импортировать выбранные ({selectedProxies.size})
+                                        </button>
+                                    </div>
+
+                                    <div className="space-y-2 max-h-[50vh] overflow-y-auto">
                                         {myProxies.map(proxy => (
-                                            <label key={proxy.id} className="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                                            <label
+                                                key={proxy.id}
+                                                className="flex items-center p-3 border border-zinc-200 rounded-xl hover:bg-zinc-50 cursor-pointer transition"
+                                            >
                                                 <input
                                                     type="checkbox"
                                                     checked={selectedProxies.has(proxy.id)}
                                                     onChange={(e) => {
-                                                        const newSet = new Set(selectedProxies);
-                                                        if (e.target.checked) {
-                                                            newSet.add(proxy.id);
-                                                        } else {
-                                                            newSet.delete(proxy.id);
-                                                        }
-                                                        setSelectedProxies(newSet);
+                                                        const s = new Set(selectedProxies);
+                                                        e.target.checked ? s.add(proxy.id) : s.delete(proxy.id);
+                                                        setSelectedProxies(s);
                                                     }}
-                                                    className="mr-3"
+                                                    className="mr-3 accent-purple-600"
                                                 />
-                                                <div className="flex-1">
-                                                    <p className="font-medium">
-                                                        {proxy.geoip?.countryCode2 || 'Unknown'} - {proxy.public_ipaddress}
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-medium text-sm truncate">
+                                                        {countryFlag(proxy.country_code || '')} {(proxy.country_code || '??').toUpperCase()} — {proxy.public_ipaddress || proxy.connection_host}
                                                     </p>
-                                                    <p className="text-sm text-gray-600">
+                                                    <p className="text-xs text-zinc-500 truncate">
                                                         {proxy.connection_host}:{proxy.connection_port}
+                                                        {proxy.access_expires_at && <span className="ml-2 text-zinc-400">до {new Date(proxy.access_expires_at).toLocaleDateString()}</span>}
                                                     </p>
                                                 </div>
                                             </label>

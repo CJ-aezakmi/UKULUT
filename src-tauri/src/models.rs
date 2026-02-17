@@ -167,21 +167,32 @@ pub struct CyberYozhShopItem {
     pub days: Option<u32>,
     pub traffic_limitation: Option<i32>,  // Может быть -1 для безлимита
     pub proxy_category: Option<String>,
+    /// Title of the parent category group — set during flatten, not from individual product JSON
+    #[serde(default)]
+    pub group_title: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CyberYozhShopCategory {
     pub proxy_products: Vec<CyberYozhShopItem>,
+    /// Parent category title (e.g. "5G Arizona Phoenix T-Mobile Unlimited")
+    pub title: Option<String>,
+    /// Parent proxy_category (e.g. "lte", "datacenter_dedicated", "residential_static")
+    pub proxy_category: Option<String>,
+    /// Parent location_country_code (e.g. "us")
+    pub location_country_code: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CyberYozhHistoryResponse {
     pub results: Vec<CyberYozhProxyItem>,
+    pub next: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CyberYozhShopResponse {
     pub count: u32,
+    pub next: Option<String>,
     pub results: Vec<CyberYozhShopCategory>,
 }
 
