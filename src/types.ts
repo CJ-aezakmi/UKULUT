@@ -84,6 +84,7 @@ export interface CyberYozhShopItem {
     days?: number;
     traffic_limitation?: number;
     proxy_category?: string;
+    group_title?: string;  // Title of parent category group (for card grouping)
 }
 
 export interface Cookie {

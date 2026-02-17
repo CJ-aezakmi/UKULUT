@@ -1,0 +1,200 @@
+/*
+  Чтобы у нотификации корректно отображался иконка
+  необходимо добавить svg в папку static/assets/svg/notifications
+  Имя иконки строго должно соответствовать следующей маске: {notification_type}.svg
+  И добавить в переменную hasOwnIcon условие, что этот тип имеет иконку
+*/
+
+const notificationsContainer = document.querySelector("#notification-container");
+const notificationsBadge = document.querySelector("#global-notification-badge");
+const menuButton = document.querySelector(".user-notification__menu-button");
+const dropdownMenu = document.querySelector(".user-notification__menu");
+const loaderContainer = document.querySelector("#notifications-loader");
+const emptyContainer = document.querySelector("#notification-container-empty");
+const refreshButton = document.querySelector("#notification-refresh-button");
+
+document.addEventListener("DOMContentLoaded", initNotifications);
+
+async function initNotifications() {
+  const notifications = await getNotifications();
+  renderNotifications(notifications?.results ?? []);
+}
+
+async function getNotifications() {
+  try {
+    showMenuLoadingState();
+    const res = await fetch("/api/v1/notification/", {
+      headers: {
+        "Accept-Language": SITE_CONFIG.SITE_LANG,
+      },
+    });
+    const resData = await res.json();
+
+    return resData;
+  } catch {
+  } finally {
+    hideMenuLoadingState();
+  }
+}
+
+function renderNotifications(notifications) {
+  const hasNewNotifications =
+    notifications.filter((notification) => notification.state === "new").length > 0;
+
+  if (hasNewNotifications) {
+    notificationsBadge.classList.add("show");
+  }
+
+  if (notifications.length === 0) {
+    emptyContainer.classList.remove("hide");
+    notificationsContainer.classList.add("hide");
+    return;
+  } else {
+    emptyContainer.classList.add("hide");
+  }
+
+  notificationsContainer.innerHTML = notifications.map(renderNotificationItem).join("");
+  initEventListeners();
+}
+
+function renderNotificationItem(notification) {
+  const hasActionButton = notification.action_label && notification.action_url;
+
+  return `
+    <div class="user-notification__notification-card">
+      <div class="user-notification__card-header">
+        <div class="user-notification__card-icon">
+          ${getNotificationIcon(notification)}
+          <div class="user-notification__badge ${notification.state}"></div>
+        </div>
+
+        <p class="user-notification__card-title">${notification.title}</p>
+        <button
+          data-id="${notification.id}"
+          data-action="mark-delete"
+          class="user-notification__card-close-button"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+
+      <p class="user-notification__card-message">${notification.message}</p>
+
+      ${
+        hasActionButton
+          ? `
+          <button
+            data-id="${notification.id}"
+            data-url="${notification.action_url}"
+            data-action="mark-read"
+            class="btn btn--secondary btn--sm user-notification__card-button"
+          >
+            ${notification.action_label}
+          </button>
+        `
+          : ""
+      }
+    </div>
+  `;
+}
+
+async function handleClickActionButton(e) {
+  const { url, id } = e.target.dataset;
+
+  try {
+    await fetch(`/api/v1/notification/${id}/mark_read/`, {
+      method: "post",
+      headers: { "X-CSRFToken": SITE_CONFIG.CSRF_TOKEN },
+    });
+  } catch {}
+
+  window.location.href = url;
+}
+
+async function handleMarkDelete(e) {
+  const { id } = e.target.dataset;
+
+  try {
+    const res = await fetch(`/api/v1/notification/${id}/mark_delete/`, {
+      method: "post",
+      headers: { "X-CSRFToken": SITE_CONFIG.CSRF_TOKEN },
+    });
+    const resData = await res.json();
+
+    if (resData.state === "deleted") {
+      initNotifications();
+      return;
+    }
+  } catch {}
+}
+
+function getNotificationIcon(notification) {
+  const { notification_type } = notification;
+
+  const hasOwnIcon = ["debit", "credit", "renewal_reminder", "expired"].includes(notification_type);
+
+  if (hasOwnIcon) {
+    return `
+      <img
+        src="/static/assets/svg/notifications/${notification_type}.svg"
+        alt="${notification.title}"
+        width="24" height="24"
+      />
+    `;
+  } else {
+    return `
+      <img
+        src="/static/assets/svg/notifications/default-icon.svg"
+        alt="${notification.title}"
+        width="24" height="24"
+      />
+    `;
+  }
+}
+
+function initEventListeners() {
+  const actionButtons = document.querySelectorAll('[data-action="mark-read"]');
+  const deleteButtons = document.querySelectorAll('[data-action="mark-delete"]');
+
+  deleteButtons.forEach((btn) => {
+    btn.removeEventListener("click", handleMarkDelete);
+    btn.addEventListener("click", handleMarkDelete);
+  });
+
+  actionButtons.forEach((btn) => {
+    btn.removeEventListener("click", handleClickActionButton);
+    btn.addEventListener("click", handleClickActionButton);
+  });
+}
+
+function toggleNotificationMenu() {
+  dropdownMenu.classList.toggle("hide");
+}
+
+function handleClickOutside(e) {
+  const isClickInsideMenu = Boolean(e.target.closest(".user-notification__menu"));
+  const isToggleButton = Boolean(e.target.closest(".user-notification__wrapper"));
+
+  if (!isToggleButton && !isClickInsideMenu) {
+    dropdownMenu.classList.add("hide");
+  }
+}
+
+menuButton.addEventListener("click", toggleNotificationMenu);
+document.addEventListener("click", handleClickOutside);
+
+const showMenuLoadingState = () => {
+  loaderContainer.classList.remove("hide");
+  notificationsContainer.classList.add("hide");
+  emptyContainer.classList.add("hide");
+};
+
+const hideMenuLoadingState = () => {
+  loaderContainer.classList.add("hide");
+  notificationsContainer.classList.remove("hide");
+  emptyContainer.classList.remove("hide");
+};
+
+refreshButton.addEventListener("click", initNotifications);

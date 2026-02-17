@@ -266,37 +266,86 @@ impl ProxyApiClient {
         _country_code: Option<&str>,
         _access_type: Option<&str>,
     ) -> Result<Vec<CyberYozhShopItem>> {
-        let url = format!("{}proxies/shop/", CYBER_YOZH_BASE_URL);
-        
-        let request = self.client.get(&url).header("X-Api-Key", api_key);
-
-        // Не добавляем параметры фильтрации, так как API их не поддерживает корректно
-        // Фильтрация будет происходить на клиенте
-
-        let response = request.send().await?;
-        let text = response.text().await?;
-        
-        // Логируем ПОЛНЫЙ сырой ответ для первого продукта
-        println!("[CyberYozh API] ===== RAW RESPONSE =====");
-        println!("{}", &text[..text.len().min(2000)]);
-        println!("[CyberYozh API] =====================");
-        
-        // Парсим ответ
-        let data: CyberYozhShopResponse = serde_json::from_str(&text)
-            .map_err(|e| anyhow!("Failed to parse shop response: {}", e))?;
-        
-        // Извлекаем все proxy_products из всех категорий
         let mut all_proxies = Vec::new();
-        for category in data.results {
-            all_proxies.extend(category.proxy_products);
+        let mut page = 1;
+        let page_size = 500;
+        
+        loop {
+            let url = format!("{}proxies/shop/?page={}&page_size={}", CYBER_YOZH_BASE_URL, page, page_size);
+            println!("[CyberYozh API] Fetching page {} (page_size={}): {}", page, page_size, url);
+            
+            let response = self.client.get(&url)
+                .header("X-Api-Key", api_key)
+                .send()
+                .await?;
+            let text = response.text().await?;
+            
+            if page == 1 {
+                println!("[CyberYozh API] ===== RAW RESPONSE (first 3000 chars) =====");
+                println!("{}", &text[..text.len().min(3000)]);
+                println!("[CyberYozh API] =====================");
+            }
+            
+            let data: CyberYozhShopResponse = serde_json::from_str(&text)
+                .map_err(|e| anyhow!("Failed to parse shop response page {}: {}", page, e))?;
+            
+            println!("[CyberYozh API] Page {}: count={}, results={}, next={:?}", 
+                page, data.count, data.results.len(), data.next);
+            
+            // Собираем unique категории для статистики
+            let mut category_stats: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+            
+            for category in data.results {
+                let parent_category = category.proxy_category.clone();
+                let parent_country = category.location_country_code.clone();
+                
+                for mut product in category.proxy_products {
+                    // Наследуем proxy_category от родителя, если у продукта пусто
+                    if product.proxy_category.is_none() || product.proxy_category.as_deref() == Some("") {
+                        product.proxy_category = parent_category.clone();
+                    }
+                    // Наследуем location_country_code если у продукта пусто
+                    if product.location_country_code.is_none() || product.location_country_code.as_deref() == Some("") {
+                        product.location_country_code = parent_country.clone();
+                    }
+                    // Устанавливаем group_title от родительской группы
+                    product.group_title = category.title.clone();
+                    
+                    // Статистика категорий
+                    let cat_key = product.proxy_category.clone().unwrap_or_else(|| "(none)".to_string());
+                    *category_stats.entry(cat_key).or_insert(0) += 1;
+                    
+                    all_proxies.push(product);
+                }
+            }
+            
+            // Логируем статистику категорий на этой странице
+            for (cat, count) in &category_stats {
+                println!("[CyberYozh API] Page {} category '{}': {} products", page, cat, count);
+            }
+            
+            // Проверяем, есть ли следующая страница
+            if data.next.is_some() {
+                page += 1;
+                if page > 20 {
+                    println!("[CyberYozh API] Safety limit: stopping at page 20");
+                    break;
+                }
+            } else {
+                break;
+            }
         }
         
-        println!("[CyberYozh API] Parsed {} proxy products", all_proxies.len());
+        // Дедупликация по product ID (одни и те же категории могут приходить на разных страницах)
+        let mut seen_ids = std::collections::HashSet::new();
+        all_proxies.retain(|p| seen_ids.insert(p.id.clone()));
         
-        // Логируем первые 3 прокси для проверки
-        for (i, proxy) in all_proxies.iter().take(3).enumerate() {
-            println!("[CyberYozh API] Proxy #{}: id={}, title={}, price={:?}, currency={:?}", 
-                i+1, proxy.id, proxy.title, proxy.price, proxy.currency);
+        println!("[CyberYozh API] Total: {} unique proxy products across {} pages", all_proxies.len(), page);
+        
+        // Логируем первые 5 прокси для проверки
+        for (i, proxy) in all_proxies.iter().take(5).enumerate() {
+            println!("[CyberYozh API] Product #{}: id={}, title='{}', category={:?}, price={:?}", 
+                i+1, proxy.id, proxy.title, proxy.proxy_category, proxy.price);
         }
         
         Ok(all_proxies)
@@ -331,24 +380,87 @@ impl ProxyApiClient {
     }
 
     pub async fn cyberyozh_get_my_proxies(&self, api_key: &str) -> Result<Vec<CyberYozhProxyItem>> {
-        let url = format!("{}proxies/history/", CYBER_YOZH_BASE_URL);
+        let mut all_proxies = Vec::new();
+        let mut page = 1;
         
-        let response = self.client
-            .get(&url)
-            .header("X-Api-Key", api_key)
-            .send()
-            .await?;
-
-        let data: CyberYozhHistoryResponse = response.json().await?;
+        loop {
+            let url = format!("{}proxies/history/?page={}&page_size=200", CYBER_YOZH_BASE_URL, page);
+            println!("[CyberYozh History] Fetching page {}: {}", page, url);
+            
+            let response = self.client
+                .get(&url)
+                .header("X-Api-Key", api_key)
+                .send()
+                .await?;
+            
+            let text = response.text().await?;
+            println!("[CyberYozh History] Page {} raw (first 500): {}", page, &text[..text.len().min(500)]);
+            
+            // Parse as Value first to handle inconsistent field types (e.g. connection_port: "---" vs 46140)
+            let value: serde_json::Value = serde_json::from_str(&text)
+                .map_err(|e| anyhow!("Failed to parse history JSON page {}: {}", page, e))?;
+            
+            let has_next = value.get("next").and_then(|v| v.as_str()).is_some();
+            let results = value.get("results").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+            
+            println!("[CyberYozh History] Page {}: {} raw results, has_next={}", page, results.len(), has_next);
+            
+            for item_val in &results {
+                // Skip entries with placeholder values like "---"
+                let host = item_val.get("connection_host").and_then(|v| v.as_str()).unwrap_or("---");
+                let port_val = item_val.get("connection_port");
+                let port: u16 = match port_val {
+                    Some(serde_json::Value::Number(n)) => n.as_u64().unwrap_or(0) as u16,
+                    Some(serde_json::Value::String(s)) => s.parse().unwrap_or(0),
+                    _ => 0,
+                };
+                
+                if host == "---" || host == "!" || port == 0 {
+                    println!("[CyberYozh History] Skipping proxy with invalid host/port: host={}, port={}", host, port);
+                    continue;
+                }
+                
+                let proxy = CyberYozhProxyItem {
+                    id: item_val.get("id").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+                    connection_host: host.to_string(),
+                    connection_port: port,
+                    connection_login: item_val.get("connection_login").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+                    connection_password: item_val.get("connection_password").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+                    country_code: item_val.get("geoip")
+                        .and_then(|g| g.get("countryCode2"))
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
+                    access_type: item_val.get("access_type").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                    category: item_val.get("proxy_category").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                    expired: item_val.get("expired").and_then(|v| v.as_bool()).unwrap_or(true),
+                    system_status: item_val.get("system_status").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                    public_ipaddress: item_val.get("public_ipaddress").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                    access_expires_at: item_val.get("access_expires_at").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                };
+                
+                println!("[CyberYozh History] Parsed proxy: id={}, {}:{}, status={:?}, expired={}",
+                    proxy.id, proxy.connection_host, proxy.connection_port, proxy.system_status, proxy.expired);
+                
+                all_proxies.push(proxy);
+            }
+            
+            if has_next {
+                page += 1;
+                if page > 20 { break; }
+            } else {
+                break;
+            }
+        }
         
         // Фильтруем только активные прокси
-        let active_proxies: Vec<CyberYozhProxyItem> = data
-            .results
+        let active_proxies: Vec<CyberYozhProxyItem> = all_proxies
             .into_iter()
             .filter(|p| {
                 !p.expired && p.system_status.as_deref() == Some("active")
             })
             .collect();
+        
+        println!("[CyberYozh History] Total active proxies: {}", active_proxies.len());
 
         Ok(active_proxies)
     }
