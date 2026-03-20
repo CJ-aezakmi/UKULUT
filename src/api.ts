@@ -6,8 +6,6 @@ import type {
     SXOrgCountry,
     SXOrgState,
     SXOrgCity,
-    CyberYozhProxyItem,
-    CyberYozhShopItem,
 } from './types';
 
 // ============================================================================
@@ -100,38 +98,6 @@ export async function sxOrgCreateProxy(params: {
     proxyName: string;
 }): Promise<string[]> {
     return await invoke('sx_org_create_proxy', params);
-}
-
-// ============================================================================
-// CYBERYOZH API
-// ============================================================================
-
-export async function cyberyozhValidateKey(apiKey: string): Promise<[boolean, string]> {
-    return await invoke('cyberyozh_validate_key', { apiKey });
-}
-
-export async function cyberyozhGetShopProxies(
-    apiKey: string,
-    countryCode?: string,
-    accessType?: string
-): Promise<CyberYozhShopItem[]> {
-    return await invoke('cyberyozh_get_shop_proxies', { apiKey, countryCode, accessType });
-}
-
-export async function cyberyozhBuyProxy(
-    apiKey: string,
-    proxyId: string,
-    autoRenew: boolean
-): Promise<string> {
-    return await invoke('cyberyozh_buy_proxy', { apiKey, proxyId, autoRenew });
-}
-
-export async function cyberyozhGetMyProxies(apiKey: string): Promise<CyberYozhProxyItem[]> {
-    return await invoke('cyberyozh_get_my_proxies', { apiKey });
-}
-
-export async function cyberyozhImportProxies(apiKey: string): Promise<string[]> {
-    return await invoke('cyberyozh_import_proxies', { apiKey });
 }
 
 // ============================================================================
@@ -352,20 +318,6 @@ export const sxorg = {
             proxyName: `proxy_${Date.now()}`,
         });
         return result[0]; // Return first created proxy
-    },
-};
-
-export const cyberyozh = {
-    validateKey: async (apiKey: string): Promise<boolean> => {
-        const [isValid] = await cyberyozhValidateKey(apiKey);
-        return isValid;
-    },
-    getShopProxies: cyberyozhGetShopProxies,
-    buyProxy: cyberyozhBuyProxy,
-    getMyProxies: cyberyozhGetMyProxies,
-    importProxies: async (apiKey: string): Promise<number> => {
-        const result = await cyberyozhImportProxies(apiKey);
-        return result.length;
     },
 };
 
