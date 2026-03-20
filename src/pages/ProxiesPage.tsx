@@ -2,9 +2,7 @@ import { useState, useEffect } from 'react';
 import { Proxy, ProxyCheckResult } from '../types';
 import * as api from '../api';
 import { useNotification } from '../utils/notifications';
-import { openExternal } from '../utils/external';
 import SXOrgModal from '../components/SXOrgModal';
-import CyberYozhModal from '../components/CyberYozhModal';
 import PSBProxyModal from '../components/PSBProxyModal';
 
 export default function ProxiesPage() {
@@ -15,7 +13,6 @@ export default function ProxiesPage() {
 
     // Модальные окна
     const [showSXOrgModal, setShowSXOrgModal] = useState(false);
-    const [showCyberYozhModal, setShowCyberYozhModal] = useState(false);
     const [showPSBProxyModal, setShowPSBProxyModal] = useState(false);
 
     // Форма ручного добавления
@@ -153,11 +150,6 @@ export default function ProxiesPage() {
                 onClose={() => setShowSXOrgModal(false)}
                 onProxiesImported={loadProxies}
             />
-            <CyberYozhModal
-                isOpen={showCyberYozhModal}
-                onClose={() => setShowCyberYozhModal(false)}
-                onProxiesImported={loadProxies}
-            />
             <PSBProxyModal
                 isOpen={showPSBProxyModal}
                 onClose={() => setShowPSBProxyModal(false)}
@@ -237,7 +229,7 @@ export default function ProxiesPage() {
                         ➕ Добавить прокси
                     </button>
 
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-2 gap-3">
                         <button
                             onClick={(e) => {
                                 e.preventDefault();
@@ -255,27 +247,6 @@ export default function ProxiesPage() {
                             className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-medium py-3 rounded-lg transition flex items-center justify-center gap-2"
                         >
                             🔐 PSB Proxy
-                        </button>
-                        <button
-                            onClick={(e) => {
-                                e.preventDefault();
-                                setShowCyberYozhModal(true);
-                            }}
-                            className="bg-black hover:bg-gray-900 text-white font-medium py-3 rounded-lg transition flex items-center justify-center gap-2"
-                        >
-                            🐾 CyberYozh Прокси
-                        </button>
-                    </div>
-
-                    <div className="text-center pt-1">
-                        <button
-                            onClick={(e) => {
-                                e.preventDefault();
-                                openExternal('https://proxy-seller.com/?partner=EUJT00V88RVKU3');
-                            }}
-                            className="text-sm font-semibold text-gray-600 hover:text-blue-600 underline underline-offset-2 transition"
-                        >
-                            PROXYSELLER
                         </button>
                     </div>
                 </div>

@@ -139,64 +139,6 @@ pub struct SXOrgCreateProxyResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CyberYozhProxyItem {
-    pub id: String,
-    pub connection_host: String,
-    pub connection_port: u16,
-    pub connection_login: String,
-    pub connection_password: String,
-    pub country_code: Option<String>,
-    pub access_type: Option<String>,
-    pub category: Option<String>,
-    pub expired: bool,
-    pub system_status: Option<String>,
-    pub public_ipaddress: Option<String>,
-    pub access_expires_at: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CyberYozhShopItem {
-    pub id: String,
-    pub title: String,
-    pub location_country_code: Option<String>,
-    pub proxy_protocol: Option<String>,
-    #[serde(rename = "price_usd")]
-    pub price: Option<String>,  // Приходит как строка "875.00"
-    pub currency: Option<String>,
-    pub stock_status: Option<String>,  // "in_stock" или "out_of_stock"
-    pub days: Option<u32>,
-    pub traffic_limitation: Option<i32>,  // Может быть -1 для безлимита
-    pub proxy_category: Option<String>,
-    /// Title of the parent category group — set during flatten, not from individual product JSON
-    #[serde(default)]
-    pub group_title: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CyberYozhShopCategory {
-    pub proxy_products: Vec<CyberYozhShopItem>,
-    /// Parent category title (e.g. "5G Arizona Phoenix T-Mobile Unlimited")
-    pub title: Option<String>,
-    /// Parent proxy_category (e.g. "lte", "datacenter_dedicated", "residential_static")
-    pub proxy_category: Option<String>,
-    /// Parent location_country_code (e.g. "us")
-    pub location_country_code: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CyberYozhHistoryResponse {
-    pub results: Vec<CyberYozhProxyItem>,
-    pub next: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CyberYozhShopResponse {
-    pub count: u32,
-    pub next: Option<String>,
-    pub results: Vec<CyberYozhShopCategory>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GeoInfo {
     pub country_code: String,
     pub city: Option<String>,

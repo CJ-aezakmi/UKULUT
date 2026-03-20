@@ -9,9 +9,6 @@ use std::os::windows::process::CommandExt;
 use crate::models::Profile;
 use crate::proxy_relay::ProxyRelay;
 
-/// CyberYozh extension ID (вычислен из public key в их manifest.json)
-const CYBERYOZH_EXTENSION_ID: &str = "paljcopanhinogelplkpgfnljiomaapc";
-
 /// WebGL renderer presets for realistic fingerprints
 const WEBGL_RENDERERS: &[&str] = &[
     "ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11 vs_5_0 ps_5_0, D3D11)",
@@ -684,11 +681,6 @@ pub fn launch_chrome(
         local_proxy_port,
         cyberyozh_path.as_deref(),
     );
-
-    // Pin CyberYozh extension in Chrome toolbar preferences
-    if cyberyozh_path.is_some() {
-        pin_extension_in_preferences(&profile_dir, CYBERYOZH_EXTENSION_ID);
-    }
 
     // Determine effective timezone for environment variable
     let mut timezone = profile.timezone.clone();

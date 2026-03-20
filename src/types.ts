@@ -57,36 +57,6 @@ export interface SXOrgCity {
     name: string;
 }
 
-// CyberYozh API Types
-export interface CyberYozhProxyItem {
-    id: string;
-    connection_host: string;
-    connection_port: number;
-    connection_login: string;
-    connection_password: string;
-    country_code?: string;
-    access_type?: string;
-    category?: string;
-    expired: boolean;
-    system_status?: string;
-    public_ipaddress?: string;
-    access_expires_at?: string;
-}
-
-export interface CyberYozhShopItem {
-    id: string;
-    title: string;
-    location_country_code?: string;
-    proxy_protocol?: string;
-    price_usd?: string;  // Приходит как строка "875.00"
-    currency?: string;
-    stock_status?: string;
-    days?: number;
-    traffic_limitation?: number;
-    proxy_category?: string;
-    group_title?: string;  // Title of parent category group (for card grouping)
-}
-
 export interface Cookie {
     name: string;
     value: string;

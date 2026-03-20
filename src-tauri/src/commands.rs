@@ -99,29 +99,8 @@ pub async fn launch_profile(
         println!("[LaunchProfile] Extension template: {:?}", extension_template_dir);
     }
 
-    // CyberYozh расширение — лежит рядом с antidetect-extension
-    let cyberyozh_dir = if cfg!(debug_assertions) {
-        exe_dir.parent()
-            .and_then(|p| p.parent())
-            .and_then(|p| p.parent())
-            .map(|p| p.join("src-tauri").join("cyberyozh-extension"))
-    } else {
-        Some(exe_dir.join("cyberyozh-extension"))
-    };
-
-    let cyberyozh_path = cyberyozh_dir.filter(|p| p.exists());
-
-    #[cfg(debug_assertions)]
-    {
-        if let Some(ref p) = cyberyozh_path {
-            println!("[LaunchProfile] CyberYozh extension: {:?}", p);
-        } else {
-            println!("[LaunchProfile] CyberYozh extension не найден");
-        }
-    }
-
     // Launch Chrome with anti-detect profile
-    match browser::launch_chrome(&profile, &extension_template_dir, cyberyozh_path) {
+    match browser::launch_chrome(&profile, &extension_template_dir, None) {
         Ok(child) => {
             process_manager.add_process(child);
             Ok(format!("Profile '{}' launched successfully", profile_name))
@@ -338,83 +317,6 @@ pub async fn sx_org_create_proxy(
     }
 
     Ok(proxies)
-}
-
-// ============================================================================
-// CYBERYOZH API COMMANDS
-// ============================================================================
-
-#[tauri::command]
-pub async fn cyberyozh_validate_key(api_key: String) -> Result<(bool, String), String> {
-    let client = ProxyApiClient::new();
-    client
-        .cyberyozh_validate_key(&api_key)
-        .await
-        .map_err(|e| format!("Validation failed: {}", e))
-}
-
-#[tauri::command]
-pub async fn cyberyozh_get_shop_proxies(
-    api_key: String,
-    country_code: Option<String>,
-    access_type: Option<String>,
-) -> Result<Vec<CyberYozhShopItem>, String> {
-    let client = ProxyApiClient::new();
-    client
-        .cyberyozh_get_shop_proxies(
-            &api_key,
-            country_code.as_deref(),
-            access_type.as_deref(),
-        )
-        .await
-        .map_err(|e| format!("Failed to get shop proxies: {}", e))
-}
-
-#[tauri::command]
-pub async fn cyberyozh_buy_proxy(
-    api_key: String,
-    proxy_id: String,
-    auto_renew: bool,
-) -> Result<String, String> {
-    let client = ProxyApiClient::new();
-    client
-        .cyberyozh_buy_proxy(&api_key, &proxy_id, auto_renew)
-        .await
-        .map_err(|e| format!("Failed to buy proxy: {}", e))
-}
-
-#[tauri::command]
-pub async fn cyberyozh_get_my_proxies(api_key: String) -> Result<Vec<CyberYozhProxyItem>, String> {
-    let client = ProxyApiClient::new();
-    client
-        .cyberyozh_get_my_proxies(&api_key)
-        .await
-        .map_err(|e| format!("Failed to get my proxies: {}", e))
-}
-
-#[tauri::command]
-pub async fn cyberyozh_import_proxies(
-    api_key: String,
-    storage: State<'_, Arc<Storage>>,
-) -> Result<Vec<String>, String> {
-    let client = ProxyApiClient::new();
-    
-    let proxies = client
-        .cyberyozh_get_my_proxies(&api_key)
-        .await
-        .map_err(|e| format!("Failed to get proxies: {}", e))?;
-
-    let formatted = client.cyberyozh_format_proxies(proxies).await;
-    
-    let mut imported = Vec::new();
-    for proxy in formatted {
-        let proxy_str = proxy.proxy_str.clone();
-        if storage.save_proxy(proxy).is_ok() {
-            imported.push(proxy_str);
-        }
-    }
-
-    Ok(imported)
 }
 
 // ============================================================================

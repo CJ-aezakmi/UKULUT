@@ -63,13 +63,6 @@ pub fn run() {
       commands::sx_org_get_cities,
       commands::sx_org_create_proxy,
       
-      // CyberYozh commands
-      commands::cyberyozh_validate_key,
-      commands::cyberyozh_get_shop_proxies,
-      commands::cyberyozh_buy_proxy,
-      commands::cyberyozh_get_my_proxies,
-      commands::cyberyozh_import_proxies,
-      
       // PSB Proxy commands
       commands::psb_validate_key,
       commands::psb_get_sub_users,
