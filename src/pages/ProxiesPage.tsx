@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Proxy, ProxyCheckResult } from '../types';
 import * as api from '../api';
 import { useNotification } from '../utils/notifications';
+import { openExternal } from '../utils/external';
 import SXOrgModal from '../components/SXOrgModal';
 import PSBProxyModal from '../components/PSBProxyModal';
 
@@ -247,6 +248,18 @@ export default function ProxiesPage() {
                             className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-medium py-3 rounded-lg transition flex items-center justify-center gap-2"
                         >
                             🔐 PSB Proxy
+                        </button>
+                    </div>
+
+                    <div className="flex justify-center pt-1">
+                        <button
+                            onClick={(e) => {
+                                e.preventDefault();
+                                openExternal('https://mobileproxy.space/?p=259034');
+                            }}
+                            className="w-1/2 bg-gradient-to-r from-[#FF7A1A] to-[#FF9D00] hover:from-[#F06E0D] hover:to-[#F09300] text-white font-medium py-3 rounded-lg transition flex items-center justify-center gap-2 shadow-sm"
+                        >
+                            📱 MobileProxy.Space
                         </button>
                     </div>
                 </div>
