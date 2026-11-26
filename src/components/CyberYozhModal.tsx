@@ -1,7 +1,9 @@
-import { useState, useEffect, useMemo, useRef, useCallback, type ReactNode } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNotification } from '../utils/notifications';
 import { openExternal } from '../utils/external';
 import * as api from '../api';
+import CyberYozhLogo from './CyberYozhLogo';
+import Flag from './Flag';
 import type {
     CyberYozhCategory,
     CyberYozhShopCatalog,
@@ -20,17 +22,26 @@ interface CyberYozhModalProps {
 
 const CYBERYOZH_URL = 'https://app.cyberyozh.com/catalog/?utm_source=antic';
 const STORAGE_KEY = 'cyberyozh_api_key';
-const GROUPS_PAGE = 30;
+const CARDS_PAGE = 30;
 /** Delays (ms) between "Мои прокси" refreshes after a purchase — provisioning is async. */
 const PROVISION_POLL_DELAYS = [4000, 8000, 15000, 25000, 40000];
 
-const CATEGORIES: { key: CyberYozhCategory; label: string; hint: string }[] = [
-    { key: 'lte', label: 'Мобильные', hint: '4G/5G, IP мобильных операторов' },
-    { key: 'residential_static', label: 'Резидентские статические', hint: 'Постоянный IP домашнего провайдера' },
-    { key: 'residential_rotating', label: 'Резидентские ротационные', hint: 'Пакет трафика, IP меняется' },
-    { key: 'datacenter_dedicated', label: 'Датацентр выделенные', hint: 'Личный IPv4 из датацентра' },
-    { key: 'datacenter_shared', label: 'Датацентр общие', hint: 'IPv4 на нескольких пользователей' },
-];
+type MainTab = 'mobile' | 'residential' | 'datacenter';
+type SubTab = 'dedicated' | 'shared';
+
+/** Which backend category (and access-type filter) each tab pair maps to. */
+const TAB_SOURCES: Record<MainTab, Record<SubTab, { category: CyberYozhCategory; access?: 'private' | 'shared' }>> = {
+    mobile: { dedicated: { category: 'lte', access: 'private' }, shared: { category: 'lte', access: 'shared' } },
+    residential: { dedicated: { category: 'residential_static' }, shared: { category: 'residential_rotating' } },
+    datacenter: { dedicated: { category: 'datacenter_dedicated' }, shared: { category: 'datacenter_shared' } },
+};
+
+// Labels for subtabs per main tab (matches CyberYozh website)
+const SUB_TAB_LABELS: Record<MainTab, Record<SubTab, string>> = {
+    mobile: { dedicated: 'Выделенные', shared: 'Общие' },
+    residential: { dedicated: 'Статические', shared: 'Ротационные' },
+    datacenter: { dedicated: 'Выделенные', shared: 'Общие' },
+};
 
 const SESSION_TYPES = [
     { value: 'random', label: 'Новый IP на каждый запрос' },
@@ -40,9 +51,7 @@ const SESSION_TYPES = [
 
 const POPULAR_COUNTRIES = ['US', 'GB', 'DE', 'FR', 'NL', 'PL', 'UA', 'KZ', 'TR', 'CA', 'IT', 'ES', 'BR', 'IN', 'JP'];
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+// ────── helpers ──────
 
 let regionNames: { of: (code: string) => string | undefined } | null = null;
 try {
@@ -59,76 +68,83 @@ function countryName(code: string): string {
     }
 }
 
-function plural(n: number, one: string, few: string, many: string): string {
-    const mod10 = n % 10;
-    const mod100 = n % 100;
-    if (mod10 === 1 && mod100 !== 11) return one;
-    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
-    return many;
-}
-
-function daysLabel(days?: number | null): string {
-    if (!days) return '';
-    return `${days} ${plural(days, 'день', 'дня', 'дней')}`;
-}
-
-function trafficLabel(mb?: number | null): string {
-    if (!mb) return 'Безлимит';
-    if (mb >= 1024) {
-        const gb = mb / 1024;
-        return `${Number.isInteger(gb) ? gb : gb.toFixed(1)} ГБ`;
-    }
-    return `${mb} МБ`;
-}
-
-function bytesLabel(bytes: number): string {
-    if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} ГБ`;
-    if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(0)} МБ`;
-    return `${bytes} Б`;
-}
-
-function money(n?: number | null): string {
-    return `$${(n ?? 0).toFixed(2)}`;
-}
-
 function effectivePrice(p: CyberYozhShopProduct): number {
     return p.discounted_price != null && p.discounted_price > 0 ? p.discounted_price : p.price_usd;
 }
 
-function formatDate(s?: string | null): string {
-    if (!s) return '—';
-    const d = new Date(s);
-    if (isNaN(d.getTime())) return s;
-    return d.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+/** Human-readable option label like on the CyberYozh website: "1 Месяц / ∞ GB / $49.00" */
+function optionLabel(p: CyberYozhShopProduct): string {
+    const days = p.days || 0;
+    let dur: string;
+    if (days <= 0) dur = '∞';
+    else if (days === 1) dur = '1 День';
+    else if (days <= 4) dur = `${days} Дня`;
+    else if (days < 30) dur = `${days} Дней`;
+    else {
+        const m = Math.round(days / 30);
+        if (m <= 1) dur = '1 Месяц';
+        else if (m <= 4) dur = `${m} Месяца`;
+        else dur = `${m} Месяцев`;
+    }
+    const traf = !p.traffic_limit_mb || p.traffic_limit_mb < 0 ? '∞ GB' : `${Math.round(p.traffic_limit_mb / 1024)} GB`;
+    return `${dur} / ${traf} / $${effectivePrice(p).toFixed(2)}${p.in_stock ? '' : ' — нет в наличии'}`;
 }
 
-function relativeExpiry(s?: string | null): string {
-    if (!s) return '';
-    const diff = new Date(s).getTime() - Date.now();
-    if (isNaN(diff)) return '';
-    const abs = Math.abs(diff);
-    const hours = Math.round(abs / 3_600_000);
-    const days = Math.round(abs / 86_400_000);
-    const span = hours < 48 ? `${hours} ${plural(hours, 'час', 'часа', 'часов')}` : `${days} ${plural(days, 'день', 'дня', 'дней')}`;
-    return diff >= 0 ? `через ${span}` : `${span} назад`;
+/** Features differ by category — mirroring CyberYozh website */
+function buildFeatures(main: MainTab, sub: SubTab, p?: CyberYozhShopProduct): string[] {
+    const limit = p?.traffic_limit_mb && p.traffic_limit_mb > 0 ? `${Math.round(p.traffic_limit_mb / 1024)} GB Traffic` : null;
+    const protocols = (p?.protocols || []).map(x => x.toUpperCase()).join(' / ') || 'HTTP / SOCKS5';
+    switch (main) {
+        case 'mobile':
+            return [
+                sub === 'dedicated' ? 'Dedicated Mobile Router' : 'Shared Mobile Router',
+                'SOCKS5 / VPN with DNS',
+                'Manual IP Changing',
+                'High Trust Rate',
+                'Very High Speed + Low Ping',
+                'UDP Support',
+                limit || 'Unlimited Traffic',
+            ];
+        case 'residential':
+            return sub === 'dedicated'
+                ? ['24h Availability', 'Real ISP', 'Speed up to 150 Mbps', 'Low Ping', 'Supports SOCKS5 with UDP', limit || 'Unlimited Bandwidth', 'Dedicated IP']
+                : ['Rotating residential IPs', '160+ countries', 'City / region targeting', 'Sticky & rotating sessions', protocols, limit || 'Traffic package'];
+        case 'datacenter':
+        default:
+            return [
+                sub === 'dedicated' ? 'Exclusive IP ownership' : 'Shared IP',
+                'High-speed connectivity',
+                '99.9% uptime',
+                limit || 'Unlimited bandwidth',
+                protocols,
+            ];
+    }
+}
+
+/** Badge based on category — matches CyberYozh website colors */
+function resolveBadge(main: MainTab): { text: string; color: string } | null {
+    switch (main) {
+        case 'mobile': return { text: 'Premium', color: '#0059DF' };
+        case 'residential': return { text: 'Sale', color: '#FF3A34' };
+        default: return null;
+    }
+}
+
+/** Single country of a group, or null for multi-country groups ("All Countries"). */
+function groupCountry(g: CyberYozhShopGroup): string | null {
+    return g.country_codes.length === 1 ? g.country_codes[0].toUpperCase() : null;
 }
 
 function categoryLabel(category?: string | null, accessType?: string | null): string {
     switch (category) {
         case 'lte': return 'Мобильный';
-        case 'residential_static': return 'Резидентский статический';
-        case 'residential_rotating': return 'Резидентский ротационный';
-        case 'datacenter_dedicated': return 'Датацентр выделенный';
+        case 'residential_static': return 'Резидентский';
+        case 'residential_rotating': return 'Ротационный';
+        case 'datacenter_dedicated': return 'Датацентр';
         case 'datacenter_shared': return 'Датацентр общий';
-        case 'datacenter': return accessType === 'shared' ? 'Датацентр общий' : 'Датацентр выделенный';
+        case 'datacenter': return accessType === 'shared' ? 'Датацентр общий' : 'Датацентр';
         default: return category || 'Прокси';
     }
-}
-
-function accessLabel(accessType?: string | null): string | null {
-    if (accessType === 'private') return 'Выделенный';
-    if (accessType === 'shared') return 'Общий';
-    return null;
 }
 
 function cleanError(err: unknown): string {
@@ -139,83 +155,44 @@ function isThrottle(err: unknown): boolean {
     return String(err).includes(api.CYBERYOZH_THROTTLE_PREFIX);
 }
 
-function productOptionLabel(p: CyberYozhShopProduct): string {
-    if (p.traffic_limit_mb) return `${trafficLabel(p.traffic_limit_mb)}${p.days ? ` · ${daysLabel(p.days)}` : ''}`;
-    return daysLabel(p.days) || p.title;
-}
-
 const STATUS_STYLES: Record<string, { label: string; cls: string }> = {
-    active: { label: 'Активен', cls: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
-    pending: { label: 'Выдаётся', cls: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
-    expired: { label: 'Истёк', cls: 'bg-gray-500/10 text-gray-400 border-gray-500/20' },
-    deleted: { label: 'Удалён', cls: 'bg-red-500/10 text-red-400 border-red-500/20' },
+    active: { label: 'Активен', cls: 'bg-green-100 text-green-700' },
+    pending: { label: 'Выдаётся', cls: 'bg-amber-100 text-amber-700' },
+    expired: { label: 'Истёк', cls: 'bg-zinc-100 text-zinc-500' },
+    deleted: { label: 'Удалён', cls: 'bg-red-100 text-red-600' },
 };
 
-// ---------------------------------------------------------------------------
-// Small presentational pieces
-// ---------------------------------------------------------------------------
-
-function Spinner({ className = 'w-4 h-4' }: { className?: string }) {
-    return (
-        <svg className={`${className} animate-spin`} viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-        </svg>
-    );
+function Spinner() {
+    return <div className="inline-block w-8 h-8 border-4 border-zinc-200 border-t-purple-600 rounded-full animate-spin" />;
 }
 
-function CountryBadge({ code }: { code: string }) {
+function BackButton({ onClick }: { onClick: () => void }) {
     return (
-        <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[10px] font-semibold text-gray-300 tracking-wide">
-            {code.toUpperCase()}
-        </span>
+        <button onClick={onClick} className="text-sm text-zinc-500 hover:text-zinc-800 mb-4 flex items-center gap-1 transition">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Назад
+        </button>
     );
 }
-
-function StateBox({ icon, title, text, action }: { icon: 'loading' | 'empty' | 'error'; title: string; text?: string; action?: ReactNode }) {
-    return (
-        <div className="flex flex-col items-center justify-center text-center py-14 px-6">
-            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-4 border ${
-                icon === 'error' ? 'bg-red-500/10 border-red-500/20 text-red-400'
-                    : icon === 'loading' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-                    : 'bg-white/5 border-white/10 text-gray-500'
-            }`}>
-                {icon === 'loading' ? <Spinner className="w-5 h-5" /> : icon === 'error' ? (
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
-                ) : (
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" /></svg>
-                )}
-            </div>
-            <p className="text-sm font-medium text-gray-200">{title}</p>
-            {text && <p className="text-xs text-gray-500 mt-1 max-w-sm leading-relaxed">{text}</p>}
-            {action && <div className="mt-4">{action}</div>}
-        </div>
-    );
-}
-
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
 
 export default function CyberYozhModal({ isOpen, onClose, onProxiesImported }: CyberYozhModalProps) {
     const { showNotification } = useNotification();
-
-    const [view, setView] = useState<'login' | 'main'>('login');
+    const [view, setView] = useState<'login' | 'main' | 'shop' | 'import'>('login');
     const [apiKey, setApiKey] = useState('');
-    const [loggingIn, setLoggingIn] = useState(false);
     const [balance, setBalance] = useState<string | null>(null);
-    const [balanceLoading, setBalanceLoading] = useState(false);
-    const [tab, setTab] = useState<'buy' | 'my'>('buy');
+    const [loggingIn, setLoggingIn] = useState(false);
 
     // Shop
-    const [category, setCategory] = useState<CyberYozhCategory>('lte');
+    const [mainTab, setMainTab] = useState<MainTab>('mobile');
+    const [subTab, setSubTab] = useState<SubTab>('dedicated');
     const [catalogs, setCatalogs] = useState<Partial<Record<CyberYozhCategory, CyberYozhShopCatalog>>>({});
     const [shopLoading, setShopLoading] = useState(false);
     const [shopError, setShopError] = useState<string | null>(null);
     const [country, setCountry] = useState('');
-    const [search, setSearch] = useState('');
-    const [visibleGroups, setVisibleGroups] = useState(GROUPS_PAGE);
-    const [selectedOption, setSelectedOption] = useState<Record<string, string>>({});
+    const [visibleCards, setVisibleCards] = useState(CARDS_PAGE);
+    const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
 
     // Purchase confirmation
     const [confirm, setConfirm] = useState<{ group: CyberYozhShopGroup; product: CyberYozhShopProduct } | null>(null);
@@ -227,10 +204,9 @@ export default function CyberYozhModal({ isOpen, onClose, onProxiesImported }: C
     const [myProxies, setMyProxies] = useState<CyberYozhMyProxy[] | null>(null);
     const [myLoading, setMyLoading] = useState(false);
     const [myError, setMyError] = useState<string | null>(null);
-    const [selected, setSelected] = useState<Set<string>>(new Set());
+    const [selectedProxies, setSelectedProxies] = useState<Set<string>>(new Set());
     const [showInactive, setShowInactive] = useState(false);
     const [importing, setImporting] = useState(false);
-    const [localProxyStrs, setLocalProxyStrs] = useState<Set<string>>(new Set());
     const [provisioning, setProvisioning] = useState<{ attempt: number; total: number } | null>(null);
     const pollToken = useRef(0);
 
@@ -242,9 +218,8 @@ export default function CyberYozhModal({ isOpen, onClose, onProxiesImported }: C
     const [rotLoading, setRotLoading] = useState(false);
     const [rotResult, setRotResult] = useState<CyberYozhGeneratedProxy[]>([]);
 
+    const source = TAB_SOURCES[mainTab][subTab];
     const balanceNum = balance != null ? parseFloat(balance) : NaN;
-
-    // ---------------------------------------------------------------- effects
 
     useEffect(() => {
         if (isOpen && view === 'login' && !apiKey) {
@@ -260,15 +235,6 @@ export default function CyberYozhModal({ isOpen, onClose, onProxiesImported }: C
             setProvisioning(null);
         }
     }, [isOpen]);
-
-    const refreshLocalProxies = useCallback(async () => {
-        try {
-            const list = await api.getProxies();
-            setLocalProxyStrs(new Set(list.map(p => p.proxy_str)));
-        } catch {
-            /* not critical */
-        }
-    }, []);
 
     const loadCatalog = useCallback(async (cat: CyberYozhCategory, force = false) => {
         if (!force && catalogs[cat]) return;
@@ -290,7 +256,7 @@ export default function CyberYozhModal({ isOpen, onClose, onProxiesImported }: C
         try {
             const list = await api.cyberyozhGetMyProxies(apiKey);
             setMyProxies(list);
-            setSelected(prev => new Set([...prev].filter(id => list.some(p => p.id === id && p.importable))));
+            setSelectedProxies(prev => new Set([...prev].filter(id => list.some(p => p.id === id && p.importable))));
             return list;
         } catch (err) {
             if (!silent) setMyError(cleanError(err));
@@ -300,67 +266,41 @@ export default function CyberYozhModal({ isOpen, onClose, onProxiesImported }: C
         }
     }, [apiKey]);
 
-    const refreshBalance = useCallback(async () => {
-        setBalanceLoading(true);
-        try {
-            setBalance(await api.cyberyozhGetBalance(apiKey));
-        } catch (err) {
-            showNotification(isThrottle(err) ? 'Подождите' : 'Ошибка', cleanError(err), isThrottle(err) ? 'warning' : 'error');
-        } finally {
-            setBalanceLoading(false);
-        }
-    }, [apiKey, showNotification]);
-
-    // Load the selected category lazily (once per category; refresh button forces).
     useEffect(() => {
-        if (view === 'main' && tab === 'buy') {
-            loadCatalog(category);
-        }
-    }, [view, tab, category]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    useEffect(() => {
-        if (view === 'main' && tab === 'my' && myProxies === null && !myLoading) {
-            loadMyProxies().catch(() => undefined);
-            refreshLocalProxies();
-        }
-    }, [view, tab]); // eslint-disable-line react-hooks/exhaustive-deps
+        if (view === 'shop') loadCatalog(source.category);
+    }, [view, source.category]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
         setCountry('');
-        setSearch('');
-        setVisibleGroups(GROUPS_PAGE);
-    }, [category]);
+        setVisibleCards(CARDS_PAGE);
+    }, [mainTab, subTab]);
 
-    useEffect(() => {
-        setVisibleGroups(GROUPS_PAGE);
-    }, [country, search]);
+    useEffect(() => setVisibleCards(CARDS_PAGE), [country]);
 
-    // ---------------------------------------------------------------- derived
+    // ────── derived ──────
 
-    const catalog = catalogs[category];
+    const catalog = catalogs[source.category];
+
+    const tabGroups = useMemo(() => {
+        if (!catalog) return [] as CyberYozhShopGroup[];
+        return catalog.groups.filter(g => !source.access || !g.access_type || g.access_type === source.access);
+    }, [catalog, source.access]);
 
     const countryOptions = useMemo(() => {
-        if (!catalog) return [] as { code: string; count: number }[];
         const counts = new Map<string, number>();
-        for (const g of catalog.groups) {
-            // Multi-country groups (e.g. "All Countries") would flood the list.
-            if (g.country_codes.length > 10) continue;
+        for (const g of tabGroups) {
+            if (g.country_codes.length > 3) continue; // "All countries" groups
             for (const c of g.country_codes) counts.set(c, (counts.get(c) || 0) + 1);
         }
         return [...counts.entries()]
             .map(([code, count]) => ({ code, count }))
             .sort((a, b) => countryName(a.code).localeCompare(countryName(b.code), 'ru'));
-    }, [catalog]);
+    }, [tabGroups]);
 
-    const filteredGroups = useMemo(() => {
-        if (!catalog) return [];
-        const q = search.trim().toLowerCase();
-        return catalog.groups.filter(g => {
-            if (country && !g.country_codes.includes(country)) return false;
-            if (q && !g.title.toLowerCase().includes(q) && !g.country_codes.some(c => countryName(c).toLowerCase().includes(q))) return false;
-            return true;
-        });
-    }, [catalog, country, search]);
+    const cardGroups = useMemo(
+        () => (country ? tabGroups.filter(g => g.country_codes.includes(country)) : tabGroups),
+        [tabGroups, country],
+    );
 
     const visibleMyProxies = useMemo(
         () => (myProxies || []).filter(p => showInactive || p.status === 'active' || p.status === 'pending'),
@@ -369,7 +309,10 @@ export default function CyberYozhModal({ isOpen, onClose, onProxiesImported }: C
     const inactiveCount = (myProxies || []).filter(p => p.status === 'expired' || p.status === 'deleted').length;
     const importableProxies = (myProxies || []).filter(p => p.importable && p.proxy_str);
 
-    // ---------------------------------------------------------------- actions
+    // ────── actions ──────
+
+    const notifyError = (err: unknown, title = 'Ошибка') =>
+        showNotification(isThrottle(err) ? 'Подождите' : title, cleanError(err), isThrottle(err) ? 'warning' : 'error', 7000);
 
     const handleLogin = async () => {
         const key = apiKey.trim();
@@ -388,9 +331,9 @@ export default function CyberYozhModal({ isOpen, onClose, onProxiesImported }: C
             setApiKey(key);
             setBalance(res.balance ?? null);
             setView('main');
-            showNotification('CyberYozh подключён', res.message, 'success');
+            showNotification('Успех', `API ключ проверен. ${res.message}`, 'success');
         } catch (err) {
-            showNotification(isThrottle(err) ? 'Подождите' : 'Ошибка', cleanError(err), isThrottle(err) ? 'warning' : 'error');
+            notifyError(err);
         } finally {
             setLoggingIn(false);
         }
@@ -404,19 +347,16 @@ export default function CyberYozhModal({ isOpen, onClose, onProxiesImported }: C
         setBalance(null);
         setCatalogs({});
         setMyProxies(null);
-        setSelected(new Set());
-        setSelectedOption({});
+        setSelectedProxies(new Set());
+        setSelectedOptions({});
         setConfirm(null);
         setRotBase(null);
-        setRotResult([]);
         setProvisioning(null);
-        setTab('buy');
     };
 
-    const openConfirm = (group: CyberYozhShopGroup, product: CyberYozhShopProduct) => {
-        setConfirm({ group, product });
-        setAutoRenew(false);
-        setPromoCode('');
+    const openImport = () => {
+        setView('import');
+        if (myProxies === null) loadMyProxies().catch(() => undefined);
     };
 
     /** After a purchase: refresh "Мои прокси" a few times until the new proxy is issued. */
@@ -436,7 +376,7 @@ export default function CyberYozhModal({ isOpen, onClose, onProxiesImported }: C
                     return started >= purchasedAt - 10 * 60_000;
                 });
                 if (fresh.length > 0) {
-                    setSelected(prev => new Set([...prev, ...fresh.map(p => p.id)]));
+                    setSelectedProxies(prev => new Set([...prev, ...fresh.map(p => p.id)]));
                     setProvisioning(null);
                     showNotification('Прокси выдан', `Готово к импорту: ${fresh.length}. Нажмите «Импортировать выбранные».`, 'success', 7000);
                     return;
@@ -465,13 +405,11 @@ export default function CyberYozhModal({ isOpen, onClose, onProxiesImported }: C
             const res = await api.cyberyozhBuyProxy(apiKey, product.id, autoRenew && product.auto_renew_possible, promoCode.trim() || undefined);
             setConfirm(null);
             showNotification('Заказ оформлен', res.message || 'Прокси выдаётся, это может занять до минуты.', 'success', 6000);
-            setTab('my');
-            // Balance changed; the shop stock may have too.
             api.cyberyozhGetBalance(apiKey).then(setBalance).catch(() => undefined);
-            refreshLocalProxies();
+            setView('import');
             pollForNewProxy(knownIds, purchasedAt);
         } catch (err) {
-            showNotification(isThrottle(err) ? 'Подождите' : 'Покупка не удалась', cleanError(err), isThrottle(err) ? 'warning' : 'error', 9000);
+            notifyError(err, 'Покупка не удалась');
         } finally {
             setBuying(false);
         }
@@ -488,9 +426,8 @@ export default function CyberYozhModal({ isOpen, onClose, onProxiesImported }: C
             const parts = [`Добавлено: ${res.imported}`];
             if (res.skipped) parts.push(`уже были: ${res.skipped}`);
             if (res.failed) parts.push(`ошибок: ${res.failed}`);
-            showNotification(res.imported > 0 ? 'Импорт завершён' : 'Импорт', parts.join(', '), res.failed ? 'warning' : 'success');
+            showNotification(res.imported > 0 ? 'Успех' : 'Импорт', parts.join(', '), res.failed ? 'warning' : 'success');
             if (res.imported > 0) onProxiesImported();
-            await refreshLocalProxies();
         } catch (err) {
             showNotification('Ошибка импорта', cleanError(err), 'error');
         } finally {
@@ -499,40 +436,6 @@ export default function CyberYozhModal({ isOpen, onClose, onProxiesImported }: C
     };
 
     const toImportItem = (p: CyberYozhMyProxy): CyberYozhImportItem => ({ proxy_str: p.proxy_str!, country: p.country ?? null });
-
-    const handleImportSelected = () =>
-        importItems(importableProxies.filter(p => selected.has(p.id)).map(toImportItem));
-
-    const handleImportAll = () => importItems(importableProxies.map(toImportItem));
-
-    const toggleSelect = (id: string) => {
-        setSelected(prev => {
-            const next = new Set(prev);
-            if (next.has(id)) next.delete(id); else next.add(id);
-            return next;
-        });
-    };
-
-    const allSelectableSelected = importableProxies.length > 0 && importableProxies.every(p => selected.has(p.id));
-    const toggleSelectAll = () => {
-        setSelected(allSelectableSelected ? new Set() : new Set(importableProxies.map(p => p.id)));
-    };
-
-    const copyProxy = (p: CyberYozhMyProxy) => {
-        if (!p.proxy_str) return;
-        navigator.clipboard.writeText(p.proxy_str).then(
-            () => showNotification('Скопировано', 'Строка прокси скопирована в буфер обмена', 'success', 2500),
-            () => showNotification('Ошибка', 'Не удалось скопировать', 'error'),
-        );
-    };
-
-    const openRotating = (p: CyberYozhMyProxy) => {
-        setRotBase(p);
-        setRotCountry('');
-        setRotSession('random');
-        setRotAmount(5);
-        setRotResult([]);
-    };
 
     const handleGenerateRotating = async () => {
         if (!rotBase) return;
@@ -556,7 +459,7 @@ export default function CyberYozhModal({ isOpen, onClose, onProxiesImported }: C
             setRotResult(res);
             showNotification('Готово', `Сгенерировано доступов: ${res.length}`, 'success');
         } catch (err) {
-            showNotification(isThrottle(err) ? 'Подождите' : 'Ошибка', cleanError(err), isThrottle(err) ? 'warning' : 'error');
+            notifyError(err);
         } finally {
             setRotLoading(false);
         }
@@ -564,548 +467,526 @@ export default function CyberYozhModal({ isOpen, onClose, onProxiesImported }: C
 
     if (!isOpen) return null;
 
-    // ---------------------------------------------------------------- styles
-
-    const inputCls = 'w-full px-3.5 py-2.5 bg-[#0f0f0f] border border-[#2a2a2a] rounded-lg text-sm text-white placeholder-gray-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 transition-all';
-    const selectCls = 'px-3 py-2 bg-[#0f0f0f] border border-[#2a2a2a] rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 transition-all';
-    const labelCls = 'block text-[11px] font-semibold text-gray-500 mb-1.5 uppercase tracking-wider';
-    const accentBtn = 'py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed';
-    const ghostBtn = 'px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 rounded-lg text-xs font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed';
-
-    // ---------------------------------------------------------------- render
-
-    const renderLogin = () => (
-        <div className="px-6 py-8">
-            <div className="max-w-sm mx-auto space-y-5">
-                <div className="text-center mb-2">
-                    <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/15 flex items-center justify-center mx-auto mb-4 text-2xl">
-                        🦔
-                    </div>
-                    <h3 className="text-lg font-semibold text-white">Подключите CyberYozh</h3>
-                    <p className="text-sm text-gray-500 mt-1">Покупайте мобильные, резидентские и датацентр прокси прямо из Antic</p>
-                </div>
-
-                <button
-                    onClick={() => openExternal(CYBERYOZH_URL)}
-                    className="w-full py-3 rounded-lg text-sm font-semibold text-white bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 shadow-lg shadow-emerald-900/30 transition-all flex items-center justify-center gap-2"
-                >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
-                    Получить API ключ
-                    <svg className="w-3.5 h-3.5 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                </button>
-                <ol className="text-[11px] text-gray-500 space-y-1 leading-relaxed list-decimal list-inside">
-                    <li>Зарегистрируйтесь на CyberYozh и пополните баланс</li>
-                    <li>Создайте API ключ в настройках профиля</li>
-                    <li>Вставьте ключ ниже</li>
-                </ol>
-
-                <div className="flex items-center gap-3">
-                    <div className="h-px flex-1 bg-[#252525]" />
-                    <span className="text-[10px] uppercase tracking-wider text-gray-600">уже есть ключ</span>
-                    <div className="h-px flex-1 bg-[#252525]" />
-                </div>
-
-                <div>
-                    <label className={labelCls}>API ключ</label>
-                    <input
-                        type="password"
-                        value={apiKey}
-                        onChange={e => setApiKey(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && handleLogin()}
-                        placeholder="Вставьте ключ..."
-                        className={inputCls}
-                        autoFocus
-                    />
-                </div>
-                <button onClick={handleLogin} disabled={loggingIn || !apiKey.trim()} className={`w-full ${accentBtn}`}>
-                    {loggingIn ? <span className="flex items-center justify-center gap-2"><Spinner />Проверка...</span> : 'Подключить'}
-                </button>
-            </div>
-        </div>
-    );
-
-    const renderGroup = (group: CyberYozhShopGroup) => {
-        const options = group.products;
-        const firstInStock = options.find(p => p.in_stock);
-        const selId = selectedOption[group.key] && options.some(p => p.id === selectedOption[group.key] && p.in_stock)
-            ? selectedOption[group.key]
-            : firstInStock?.id;
-        const sel = options.find(p => p.id === selId);
-        const protocols = [...new Set(options.flatMap(p => p.protocols))];
-        const multiCountry = group.country_codes.length > 3;
-        const price = sel ? effectivePrice(sel) : 0;
-        const notEnough = sel && !isNaN(balanceNum) && balanceNum < price;
-
-        return (
-            <div key={group.key} className={`border rounded-xl p-4 transition-all ${group.in_stock ? 'border-[#252525] bg-[#1a1a1a] hover:border-[#333]' : 'border-[#202020] bg-[#151515] opacity-60'}`}>
-                <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                        <h4 className="text-sm font-semibold text-white leading-snug break-words">{group.title}</h4>
-                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                            {multiCountry ? (
-                                <span className="text-[11px] text-gray-400">{group.country_codes.length} стран</span>
-                            ) : group.country_codes.map(c => (
-                                <span key={c} className="inline-flex items-center gap-1 text-[11px] text-gray-400">
-                                    <CountryBadge code={c} />{countryName(c)}
-                                </span>
-                            ))}
-                            {accessLabel(group.access_type) && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-300 border border-sky-500/20">{accessLabel(group.access_type)}</span>
-                            )}
-                            {protocols.map(pr => (
-                                <span key={pr} className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-gray-400 border border-white/10 uppercase">{pr}</span>
-                            ))}
-                        </div>
-                    </div>
-                    {group.min_price_per_day != null && (
-                        <div className="text-right shrink-0">
-                            <div className="text-[10px] text-gray-500 uppercase tracking-wider">от</div>
-                            <div className="text-sm font-semibold text-emerald-400">{money(group.min_price_per_day)}<span className="text-[11px] text-gray-500 font-normal">/день</span></div>
-                        </div>
-                    )}
-                </div>
-
-                <div className="flex flex-wrap gap-1.5 mt-3">
-                    {options.map(p => {
-                        const active = p.id === selId;
-                        return (
-                            <button
-                                key={p.id}
-                                disabled={!p.in_stock}
-                                onClick={() => setSelectedOption(prev => ({ ...prev, [group.key]: p.id }))}
-                                title={p.in_stock ? p.title : 'Нет в наличии'}
-                                className={`px-2.5 py-1.5 rounded-lg border text-xs transition-all text-left ${
-                                    !p.in_stock
-                                        ? 'border-[#222] text-gray-600 line-through cursor-not-allowed'
-                                        : active
-                                            ? 'border-emerald-500/60 bg-emerald-500/10 text-white'
-                                            : 'border-[#2a2a2a] text-gray-300 hover:border-[#3a3a3a] hover:bg-white/5'
-                                }`}
-                            >
-                                <span className="font-medium">{productOptionLabel(p)}</span>
-                                <span className={`ml-1.5 ${active ? 'text-emerald-300' : 'text-gray-500'}`}>{money(effectivePrice(p))}</span>
-                            </button>
-                        );
-                    })}
-                </div>
-
-                <div className="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-[#222]">
-                    <div className="text-[11px] text-gray-500 min-w-0">
-                        {sel ? (
-                            <>
-                                {trafficLabel(sel.traffic_limit_mb)} трафика
-                                {sel.days ? ` · ${daysLabel(sel.days)}` : ''}
-                                {sel.price_per_day != null && !sel.traffic_limit_mb ? ` · ${money(sel.price_per_day)}/день` : ''}
-                            </>
-                        ) : 'Нет в наличии'}
-                    </div>
-                    <button
-                        disabled={!sel || !!notEnough}
-                        onClick={() => sel && openConfirm(group, sel)}
-                        title={notEnough ? 'Недостаточно средств на балансе' : undefined}
-                        className="shrink-0 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                        {!sel ? 'Нет в наличии' : notEnough ? `Не хватает ${money(price - balanceNum)}` : `Купить за ${money(price)}`}
-                    </button>
-                </div>
-            </div>
-        );
-    };
-
-    const renderBuy = () => (
-        <div className="px-6 py-4 space-y-4">
-            {/* Category pills */}
-            <div className="flex flex-wrap gap-1.5">
-                {CATEGORIES.map(c => (
-                    <button
-                        key={c.key}
-                        onClick={() => setCategory(c.key)}
-                        title={c.hint}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                            category === c.key
-                                ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
-                                : 'bg-transparent border-[#2a2a2a] text-gray-400 hover:text-gray-200 hover:border-[#3a3a3a]'
-                        }`}
-                    >
-                        {c.label}
-                    </button>
-                ))}
-            </div>
-
-            {/* Filters */}
-            <div className="flex flex-wrap items-center gap-2">
-                <select value={country} onChange={e => setCountry(e.target.value)} className={`${selectCls} min-w-[180px]`} disabled={!catalog || countryOptions.length === 0}>
-                    <option value="">Все страны{catalog ? ` (${catalog.groups.length})` : ''}</option>
-                    {countryOptions.map(c => (
-                        <option key={c.code} value={c.code}>{countryName(c.code)} ({c.count})</option>
-                    ))}
-                </select>
-                <input
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    placeholder="Поиск: оператор, город..."
-                    className={`${selectCls} flex-1 min-w-[160px] placeholder-gray-600`}
-                />
-                <button onClick={() => loadCatalog(category, true)} disabled={shopLoading} className={ghostBtn} title="Обновить каталог">
-                    {shopLoading ? <Spinner className="w-3.5 h-3.5" /> : (
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                    )}
-                </button>
-            </div>
-
-            <p className="text-[11px] text-gray-600 -mt-1">{CATEGORIES.find(c => c.key === category)?.hint}</p>
-
-            {catalog && !catalog.complete && (
-                <div className="text-[11px] text-amber-300/80 bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2">
-                    Загружена часть каталога ({catalog.groups.length} из {catalog.total}). Обновите позже, чтобы увидеть всё.
-                </div>
-            )}
-
-            {/* Content */}
-            {shopLoading && !catalog ? (
-                <StateBox icon="loading" title="Загружаем каталог..." text="Получаем товары в наличии" />
-            ) : shopError && !catalog ? (
-                <StateBox
-                    icon="error"
-                    title="Не удалось загрузить каталог"
-                    text={shopError}
-                    action={<button onClick={() => loadCatalog(category, true)} className={ghostBtn}>Повторить</button>}
-                />
-            ) : catalog && filteredGroups.length === 0 ? (
-                <StateBox
-                    icon="empty"
-                    title={catalog.groups.length === 0 ? 'Нет товаров в наличии' : 'Ничего не найдено'}
-                    text={catalog.groups.length === 0 ? 'В этой категории сейчас нет прокси в наличии. Попробуйте другую категорию.' : 'Измените страну или поисковый запрос.'}
-                    action={catalog.groups.length === 0 ? (
-                        <button onClick={() => openExternal(CYBERYOZH_URL)} className={ghostBtn}>Открыть каталог CyberYozh</button>
-                    ) : undefined}
-                />
-            ) : catalog ? (
-                <>
-                    {shopError && (
-                        <div className="text-[11px] text-red-300/80 bg-red-500/5 border border-red-500/20 rounded-lg px-3 py-2">{shopError}</div>
-                    )}
-                    <div className="space-y-2.5">
-                        {filteredGroups.slice(0, visibleGroups).map(renderGroup)}
-                    </div>
-                    {filteredGroups.length > visibleGroups && (
-                        <button onClick={() => setVisibleGroups(v => v + GROUPS_PAGE)} className={`w-full ${ghostBtn} py-2.5`}>
-                            Показать ещё ({filteredGroups.length - visibleGroups})
-                        </button>
-                    )}
-                </>
-            ) : null}
-        </div>
-    );
-
-    const renderMyProxy = (p: CyberYozhMyProxy) => {
-        const st = STATUS_STYLES[p.status] || STATUS_STYLES.expired;
-        const imported = !!p.proxy_str && localProxyStrs.has(p.proxy_str);
-        const isRotating = p.category === 'residential_rotating';
-        const dim = p.status === 'expired' || p.status === 'deleted';
-        return (
-            <div
-                key={p.id}
-                className={`flex items-start gap-3 border rounded-xl px-4 py-3 transition-all ${
-                    selected.has(p.id) ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-[#252525] bg-[#1a1a1a]'
-                } ${dim ? 'opacity-55' : ''}`}
-            >
-                <input
-                    type="checkbox"
-                    className="mt-1 w-4 h-4 accent-emerald-500 cursor-pointer disabled:cursor-not-allowed"
-                    checked={selected.has(p.id)}
-                    disabled={!p.importable}
-                    onChange={() => toggleSelect(p.id)}
-                />
-                <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${st.cls}`}>{st.label}</span>
-                        <span className="text-xs font-medium text-gray-200">{categoryLabel(p.category, p.access_type)}</span>
-                        {accessLabel(p.access_type) && <span className="text-[10px] text-gray-500">· {accessLabel(p.access_type)}</span>}
-                        {p.country && <span className="inline-flex items-center gap-1 text-[11px] text-gray-400"><CountryBadge code={p.country} />{countryName(p.country)}</span>}
-                        {imported && <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-300 border border-sky-500/20">В Antic</span>}
-                    </div>
-                    <p className="text-[13px] font-mono text-gray-300 mt-1 truncate">
-                        {p.display || (p.status === 'pending' ? 'Доступы ещё не выданы' : '—')}
-                    </p>
-                    <p className="text-[11px] text-gray-500 mt-0.5">
-                        {p.access_expires_at ? <>До {formatDate(p.access_expires_at)} <span className="text-gray-600">({relativeExpiry(p.access_expires_at)})</span></> : 'Срок не указан'}
-                        {p.traffic_remains != null && (p.traffic_remains < 0 ? <> · безлимит трафика</> : <> · осталось {bytesLabel(p.traffic_remains)}</>)}
-                    </p>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                    {isRotating && p.importable && (
-                        <button onClick={() => openRotating(p)} className="px-2.5 py-1.5 text-[11px] text-emerald-300 hover:bg-emerald-500/10 rounded-md transition-all" title="Сгенерировать доступы с выбором страны и сессии">
-                            Доступы
-                        </button>
-                    )}
-                    {p.proxy_str && !dim && (
-                        <button onClick={() => copyProxy(p)} className="p-1.5 text-gray-500 hover:text-white hover:bg-white/5 rounded-md transition-all" title="Копировать строку прокси">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                        </button>
-                    )}
-                </div>
-            </div>
-        );
-    };
-
-    const renderMy = () => (
-        <div className="px-6 py-4 space-y-3">
-            {provisioning && (
-                <div className="flex items-center gap-3 text-xs text-amber-200/90 bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2.5">
-                    <Spinner className="w-4 h-4 text-amber-400" />
-                    <span>Ожидаем выдачу прокси от CyberYozh… проверка {provisioning.attempt} из {provisioning.total}</span>
-                </div>
-            )}
-
-            <div className="flex flex-wrap items-center gap-2">
-                <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
-                    <input type="checkbox" className="w-4 h-4 accent-emerald-500" checked={allSelectableSelected} disabled={importableProxies.length === 0} onChange={toggleSelectAll} />
-                    Выбрать все активные
-                </label>
-                <div className="flex-1" />
-                {inactiveCount > 0 && (
-                    <button onClick={() => setShowInactive(v => !v)} className="text-[11px] text-gray-500 hover:text-gray-300 transition-colors">
-                        {showInactive ? 'Скрыть истёкшие' : `Показать истёкшие (${inactiveCount})`}
-                    </button>
-                )}
-                <button onClick={() => { loadMyProxies().catch(() => undefined); refreshLocalProxies(); }} disabled={myLoading} className={`${ghostBtn} flex items-center gap-1.5`}>
-                    {myLoading ? <Spinner className="w-3.5 h-3.5" /> : (
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                    )}
-                    Обновить
-                </button>
-            </div>
-
-            {myLoading && myProxies === null ? (
-                <StateBox icon="loading" title="Загружаем ваши прокси..." />
-            ) : myError && myProxies === null ? (
-                <StateBox icon="error" title="Не удалось загрузить прокси" text={myError}
-                    action={<button onClick={() => loadMyProxies().catch(() => undefined)} className={ghostBtn}>Повторить</button>} />
-            ) : myProxies && visibleMyProxies.length === 0 ? (
-                <StateBox
-                    icon="empty"
-                    title={myProxies.length === 0 ? 'У вас пока нет прокси' : 'Нет активных прокси'}
-                    text={myProxies.length === 0 ? 'Купите прокси во вкладке «Купить» — он появится здесь.' : `Истёкших прокси: ${inactiveCount}. Продлить их можно в личном кабинете CyberYozh.`}
-                    action={<button onClick={() => setTab('buy')} className={ghostBtn}>Перейти к покупке</button>}
-                />
-            ) : (
-                <>
-                    {myError && <div className="text-[11px] text-red-300/80 bg-red-500/5 border border-red-500/20 rounded-lg px-3 py-2">{myError}</div>}
-                    <div className="space-y-2">{visibleMyProxies.map(renderMyProxy)}</div>
-                </>
-            )}
-        </div>
-    );
-
-    const renderConfirm = () => {
-        if (!confirm) return null;
-        const { group, product } = confirm;
-        const price = effectivePrice(product);
-        const hasBalance = !isNaN(balanceNum);
-        const after = hasBalance ? balanceNum - price : NaN;
-        return (
-            <div className="absolute inset-0 bg-black/70 backdrop-blur-[1px] flex items-center justify-center p-6 z-10" onClick={() => !buying && setConfirm(null)}>
-                <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl w-full max-w-md p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
-                    <h3 className="text-base font-semibold text-white">Подтверждение покупки</h3>
-                    <p className="text-xs text-gray-500 mt-1">Средства будут списаны с баланса CyberYozh</p>
-
-                    <div className="mt-4 rounded-lg border border-[#252525] bg-[#141414] divide-y divide-[#222] text-sm">
-                        <div className="px-4 py-3">
-                            <div className="text-white font-medium break-words">{group.title}</div>
-                            <div className="text-[11px] text-gray-500 mt-0.5">{categoryLabel(product.category, group.access_type)}{accessLabel(group.access_type) ? ` · ${accessLabel(group.access_type)}` : ''}</div>
-                        </div>
-                        <div className="px-4 py-2.5 flex justify-between"><span className="text-gray-500">Срок</span><span className="text-gray-200">{daysLabel(product.days) || '—'}</span></div>
-                        <div className="px-4 py-2.5 flex justify-between"><span className="text-gray-500">Трафик</span><span className="text-gray-200">{trafficLabel(product.traffic_limit_mb)}</span></div>
-                        {product.protocols.length > 0 && (
-                            <div className="px-4 py-2.5 flex justify-between"><span className="text-gray-500">Протоколы</span><span className="text-gray-200 uppercase">{product.protocols.join(', ')}</span></div>
-                        )}
-                        <div className="px-4 py-2.5 flex justify-between items-baseline">
-                            <span className="text-gray-500">Цена</span>
-                            <span className="text-lg font-semibold text-emerald-400">
-                                {product.discounted_price != null && product.discounted_price > 0 && product.discounted_price < product.price_usd && (
-                                    <span className="text-xs text-gray-600 line-through mr-2">{money(product.price_usd)}</span>
-                                )}
-                                {money(price)}
-                            </span>
-                        </div>
-                        <div className="px-4 py-2.5 flex justify-between"><span className="text-gray-500">Баланс</span><span className="text-gray-200">{hasBalance ? money(balanceNum) : '—'}</span></div>
-                        {hasBalance && (
-                            <div className="px-4 py-2.5 flex justify-between"><span className="text-gray-500">После покупки</span><span className={after < 0 ? 'text-red-400' : 'text-gray-200'}>{money(after)}</span></div>
-                        )}
-                    </div>
-
-                    <div className="mt-4 space-y-3">
-                        <label className={`flex items-center gap-2 text-xs ${product.auto_renew_possible ? 'text-gray-300 cursor-pointer' : 'text-gray-600 cursor-not-allowed'}`}>
-                            <input type="checkbox" className="w-4 h-4 accent-emerald-500" checked={autoRenew && product.auto_renew_possible} disabled={!product.auto_renew_possible} onChange={e => setAutoRenew(e.target.checked)} />
-                            Автопродление{!product.auto_renew_possible && ' (недоступно для этого тарифа)'}
-                        </label>
-                        <input value={promoCode} onChange={e => setPromoCode(e.target.value)} placeholder="Промокод (необязательно)" className={inputCls} />
-                    </div>
-
-                    {hasBalance && after < 0 && (
-                        <p className="mt-3 text-[11px] text-red-300/90">
-                            Недостаточно средств.{' '}
-                            <button onClick={() => openExternal(CYBERYOZH_URL)} className="underline hover:text-red-200">Пополнить баланс</button>
-                        </p>
-                    )}
-
-                    <div className="flex gap-2 mt-5">
-                        <button onClick={() => setConfirm(null)} disabled={buying} className="flex-1 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 rounded-lg text-sm font-medium transition-all disabled:opacity-40">
-                            Отмена
-                        </button>
-                        <button onClick={handleBuy} disabled={buying || (hasBalance && after < 0)} className={`flex-1 ${accentBtn}`}>
-                            {buying ? <span className="flex items-center justify-center gap-2"><Spinner />Покупка...</span> : `Оплатить ${money(price)}`}
-                        </button>
-                    </div>
-                </div>
-            </div>
-        );
-    };
-
-    const renderRotating = () => {
-        if (!rotBase) return null;
-        return (
-            <div className="absolute inset-0 bg-black/70 backdrop-blur-[1px] flex items-center justify-center p-6 z-10" onClick={() => !rotLoading && setRotBase(null)}>
-                <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl w-full max-w-md p-5 shadow-2xl max-h-full overflow-y-auto" onClick={e => e.stopPropagation()}>
-                    <h3 className="text-base font-semibold text-white">Доступы ротационного прокси</h3>
-                    <p className="text-xs text-gray-500 mt-1">Сгенерируйте логины с нужной страной и типом сессии</p>
-
-                    <div className="mt-4 space-y-3">
-                        <div>
-                            <label className={labelCls}>Страна</label>
-                            <select value={rotCountry} onChange={e => setRotCountry(e.target.value)} className={`${selectCls} w-full`}>
-                                <option value="">Любая</option>
-                                {POPULAR_COUNTRIES.map(c => <option key={c} value={c}>{countryName(c)}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label className={labelCls}>Тип сессии</label>
-                            <select value={rotSession} onChange={e => setRotSession(e.target.value as typeof rotSession)} className={`${selectCls} w-full`}>
-                                {SESSION_TYPES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label className={labelCls}>Количество</label>
-                            <input type="number" min={1} max={100} value={rotAmount} onChange={e => setRotAmount(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))} className={inputCls} />
-                        </div>
-                    </div>
-
-                    {rotResult.length > 0 && (
-                        <div className="mt-4 rounded-lg border border-[#252525] bg-[#141414] max-h-40 overflow-y-auto divide-y divide-[#222]">
-                            {rotResult.map((r, i) => (
-                                <div key={i} className="px-3 py-1.5 text-[12px] font-mono text-gray-300 truncate">{r.display}</div>
-                            ))}
-                        </div>
-                    )}
-
-                    <div className="flex gap-2 mt-5">
-                        <button onClick={() => setRotBase(null)} disabled={rotLoading} className="flex-1 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 rounded-lg text-sm font-medium transition-all disabled:opacity-40">
-                            Закрыть
-                        </button>
-                        {rotResult.length > 0 ? (
-                            <button
-                                onClick={() => importItems(rotResult.map(r => ({ proxy_str: r.proxy_str, country: r.country ?? null })))}
-                                disabled={importing}
-                                className={`flex-1 ${accentBtn}`}
-                            >
-                                {importing ? 'Импорт...' : `Импортировать (${rotResult.length})`}
-                            </button>
-                        ) : (
-                            <button onClick={handleGenerateRotating} disabled={rotLoading} className={`flex-1 ${accentBtn}`}>
-                                {rotLoading ? <span className="flex items-center justify-center gap-2"><Spinner />Генерация...</span> : 'Сгенерировать'}
-                            </button>
-                        )}
-                    </div>
-                </div>
-            </div>
-        );
-    };
-
-    const selectedImportable = importableProxies.filter(p => selected.has(p.id)).length;
-
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center z-50 p-4" onClick={() => !buying && onClose()}>
-            <div
-                className="relative bg-[#161616] border border-[#252525] rounded-xl shadow-2xl shadow-black/50 w-full max-w-[820px] max-h-[88vh] flex flex-col overflow-hidden"
-                onClick={e => e.stopPropagation()}
-            >
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden relative">
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-[#222] bg-[#1a1a1a]">
-                    <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-base">🦔</div>
-                        <div>
-                            <h2 className="text-[15px] font-semibold text-white leading-tight">CyberYozh</h2>
-                            <p className="text-xs text-gray-500 mt-0.5">{view === 'login' ? 'Подключение к сервису' : 'Магазин прокси'}</p>
+                <div className="bg-gradient-to-r from-zinc-900 to-zinc-800 text-white px-6 py-4 flex justify-between items-center shrink-0">
+                    <div className="flex items-center gap-4">
+                        <CyberYozhLogo className="h-8 w-auto" textColor="white" />
+                        <div className="border-l border-white/15 pl-4">
+                            <h2 className="text-lg font-bold leading-tight">Proxy Shop</h2>
+                            {view !== 'login' && (
+                                <p className="text-xs text-zinc-400">
+                                    Баланс: <span className="text-green-400 font-semibold">${balance ?? '—'}</span>
+                                </p>
+                            )}
                         </div>
                     </div>
                     <div className="flex items-center gap-1">
-                        {view === 'main' && (
-                            <>
-                                <div className="flex items-center gap-1.5 mr-1 pl-3 pr-1.5 py-1 rounded-lg bg-[#111] border border-[#252525]">
-                                    <span className="text-[11px] text-gray-500">Баланс</span>
-                                    <span className="text-sm font-semibold text-emerald-400">{balance != null ? `$${balance}` : '—'}</span>
-                                    <button onClick={refreshBalance} disabled={balanceLoading} className="p-1 text-gray-500 hover:text-white rounded transition-colors disabled:opacity-40" title="Обновить баланс">
-                                        {balanceLoading ? <Spinner className="w-3 h-3" /> : (
-                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                                        )}
-                                    </button>
-                                </div>
-                                <button onClick={() => openExternal(CYBERYOZH_URL)} className="px-2.5 py-1.5 text-[11px] text-gray-500 hover:text-white hover:bg-white/5 rounded-md transition-all">
-                                    Пополнить
-                                </button>
-                                <button onClick={handleLogout} className="px-2.5 py-1.5 text-[11px] text-gray-500 hover:text-red-400 hover:bg-red-500/5 rounded-md transition-all">
-                                    Выйти
-                                </button>
-                            </>
+                        {view !== 'login' && (
+                            <button onClick={handleLogout} className="text-xs text-zinc-400 hover:text-white transition rounded-lg px-2.5 py-1.5 hover:bg-white/10">
+                                Выйти
+                            </button>
                         )}
-                        <button onClick={onClose} disabled={buying} className="ml-1 text-gray-500 hover:text-white transition-colors p-1.5 hover:bg-white/5 rounded-md disabled:opacity-40">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        <button onClick={onClose} className="text-zinc-400 hover:text-white transition rounded-lg p-1.5 hover:bg-white/10">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
                         </button>
                     </div>
                 </div>
 
-                {view === 'main' && (
-                    <div className="px-6 pt-4">
-                        <div className="flex gap-0.5 bg-[#111] p-1 rounded-lg">
-                            {([
-                                ['buy', 'Купить', 'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z'],
-                                ['my', `Мои прокси${myProxies ? ` (${importableProxies.length})` : ''}`, 'M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01'],
-                            ] as const).map(([key, label, icon]) => (
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto p-6">
+                    {/* ═══════════ LOGIN ═══════════ */}
+                    {view === 'login' && (
+                        <div className="max-w-md mx-auto">
+                            <div className="flex justify-center mb-4">
+                                <CyberYozhLogo className="h-10 w-auto" textColor="#18181b" />
+                            </div>
+                            <h3 className="text-xl font-bold text-center mb-6">Авторизация</h3>
+                            <input
+                                type="text"
+                                value={apiKey}
+                                onChange={(e) => setApiKey(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+                                className="w-full border border-gray-300 rounded-xl px-4 py-3 mb-4 focus:ring-2 focus:ring-purple-500 focus:outline-none text-sm"
+                                placeholder="Введите API ключ CyberYozh"
+                            />
+                            <div className="flex gap-3">
                                 <button
-                                    key={key}
-                                    onClick={() => setTab(key)}
-                                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-[13px] font-medium transition-all ${
-                                        tab === key ? 'bg-[#1e1e1e] text-white shadow-sm' : 'text-gray-500 hover:text-gray-300'
-                                    }`}
+                                    onClick={handleLogin}
+                                    disabled={loggingIn}
+                                    className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white py-3 rounded-xl font-medium transition"
                                 >
-                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d={icon} /></svg>
-                                    {label}
+                                    {loggingIn ? 'Проверка...' : 'Войти'}
                                 </button>
-                            ))}
+                                <button
+                                    onClick={() => openExternal(CYBERYOZH_URL)}
+                                    className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white py-3 rounded-xl font-medium transition flex items-center justify-center gap-2"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                    </svg>
+                                    Получить API ключ
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ═══════════ MAIN ═══════════ */}
+                    {view === 'main' && (
+                        <div className="max-w-md mx-auto">
+                            <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-6 text-center">
+                                <p className="text-green-800 font-bold text-lg">💰 Баланс: ${balance ?? '—'}</p>
+                            </div>
+
+                            <div className="space-y-3">
+                                <button
+                                    onClick={() => setView('shop')}
+                                    className="w-full bg-purple-600 hover:bg-purple-700 text-white py-4 rounded-xl font-semibold transition flex items-center justify-center gap-2"
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z" />
+                                    </svg>
+                                    Магазин прокси
+                                </button>
+                                <button
+                                    onClick={openImport}
+                                    className="w-full bg-zinc-800 hover:bg-zinc-700 text-white py-4 rounded-xl font-semibold transition flex items-center justify-center gap-2"
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                    </svg>
+                                    Импортировать мои прокси
+                                </button>
+                            </div>
+
+                            <div className="mt-6 text-center space-y-2">
+                                <p className="text-sm text-purple-600">
+                                    Промокод <strong className="bg-purple-100 px-2 py-0.5 rounded">CYBERYOZH2025</strong> — скидка 10%
+                                </p>
+                                <button onClick={() => openExternal(CYBERYOZH_URL)} className="text-xs text-zinc-400 hover:text-zinc-600 underline transition">
+                                    Пополнить баланс на сайте
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ═══════════ SHOP ═══════════ */}
+                    {view === 'shop' && (
+                        <div>
+                            <BackButton onClick={() => setView('main')} />
+
+                            {/* Main Tabs: Мобильные / Резидентские / Датацентр */}
+                            <div className="flex gap-1 bg-zinc-100 rounded-xl p-1 mb-4">
+                                {([
+                                    ['mobile', 'Мобильные'],
+                                    ['residential', 'Резидентские'],
+                                    ['datacenter', 'Датацентр'],
+                                ] as [MainTab, string][]).map(([key, label]) => (
+                                    <button
+                                        key={key}
+                                        onClick={() => { setMainTab(key); setSubTab('dedicated'); }}
+                                        className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition ${
+                                            mainTab === key ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
+                                        }`}
+                                    >
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Sub Tabs + country filter */}
+                            <div className="flex flex-wrap items-center gap-2 mb-6">
+                                {(['dedicated', 'shared'] as SubTab[]).map((key) => (
+                                    <button
+                                        key={key}
+                                        onClick={() => setSubTab(key)}
+                                        className={`px-5 py-2 text-sm font-medium rounded-lg border transition ${
+                                            subTab === key
+                                                ? 'bg-zinc-900 text-white border-zinc-900'
+                                                : 'bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400'
+                                        }`}
+                                    >
+                                        {SUB_TAB_LABELS[mainTab][key]}
+                                    </button>
+                                ))}
+                                <div className="flex-1" />
+                                {countryOptions.length > 1 && (
+                                    <select
+                                        value={country}
+                                        onChange={(e) => setCountry(e.target.value)}
+                                        className="border border-zinc-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                                    >
+                                        <option value="">Все страны ({countryOptions.length})</option>
+                                        {countryOptions.map(c => (
+                                            <option key={c.code} value={c.code}>{countryName(c.code)} ({c.count})</option>
+                                        ))}
+                                    </select>
+                                )}
+                                <button
+                                    onClick={() => loadCatalog(source.category, true)}
+                                    disabled={shopLoading}
+                                    title="Обновить"
+                                    className="p-2 rounded-lg border border-zinc-200 text-zinc-500 hover:text-zinc-800 hover:border-zinc-400 disabled:opacity-40 transition"
+                                >
+                                    <svg className={`w-4 h-4 ${shopLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            {shopLoading && !catalog && (
+                                <div className="text-center py-16">
+                                    <Spinner />
+                                    <p className="mt-3 text-sm text-zinc-500">Загрузка...</p>
+                                </div>
+                            )}
+
+                            {shopError && !shopLoading && (
+                                <div className="text-center py-12">
+                                    <p className="text-red-600 font-medium mb-1">Не удалось загрузить каталог</p>
+                                    <p className="text-sm text-zinc-500 mb-4">{shopError}</p>
+                                    <button
+                                        onClick={() => loadCatalog(source.category, true)}
+                                        className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-xl font-medium transition"
+                                    >
+                                        Повторить
+                                    </button>
+                                </div>
+                            )}
+
+                            {catalog && !shopError && cardGroups.length === 0 && (
+                                <div className="text-center py-16 text-zinc-400">
+                                    <svg className="w-12 h-12 mx-auto mb-3 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                                    </svg>
+                                    <p className="text-lg font-medium mb-1">Нет доступных прокси</p>
+                                    <p className="text-sm">В этой категории пока нет товаров</p>
+                                </div>
+                            )}
+
+                            {/* Card grid */}
+                            {catalog && !shopError && cardGroups.length > 0 && (
+                                <>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        {cardGroups.slice(0, visibleCards).map((group) => {
+                                            const products = group.products;
+                                            const selId = selectedOptions[group.key] || products.find(p => p.in_stock)?.id || products[0]?.id;
+                                            const selOpt = products.find(p => p.id === selId) || products[0];
+                                            const outOfStock = !selOpt || !selOpt.in_stock;
+                                            const badge = resolveBadge(mainTab);
+                                            return (
+                                                <div
+                                                    key={group.key}
+                                                    className="bg-white border border-zinc-200 rounded-xl overflow-hidden hover:border-zinc-300 hover:shadow-md transition-all flex flex-col"
+                                                >
+                                                    <div className="px-4 pt-4 pb-3 flex items-center gap-2.5">
+                                                        <Flag code={groupCountry(group)} />
+                                                        <span className="font-semibold text-zinc-900 text-sm flex-1 truncate" title={group.title}>{group.title}</span>
+                                                        {badge && (
+                                                            <span className="text-[11px] font-bold text-white px-2 py-0.5 rounded-md shrink-0" style={{ backgroundColor: badge.color }}>
+                                                                {badge.text}
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    <hr className="border-zinc-100 mx-4" />
+
+                                                    <div className="px-4 py-3 flex-1">
+                                                        <ul className="space-y-1.5">
+                                                            {buildFeatures(mainTab, subTab, selOpt).map((f, i) => (
+                                                                <li key={i} className="flex items-start gap-2 text-[13px] text-zinc-600">
+                                                                    <span className="text-green-500 mt-px shrink-0">✓</span>
+                                                                    {f}
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+
+                                                    <div className="px-4 pb-4 pt-2 flex items-center gap-2">
+                                                        <select
+                                                            value={selId}
+                                                            onChange={(e) => setSelectedOptions(prev => ({ ...prev, [group.key]: e.target.value }))}
+                                                            className="flex-1 min-w-0 border border-zinc-200 rounded-lg px-2.5 py-2 text-[13px] bg-zinc-50 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                                                        >
+                                                            {products.map(p => (
+                                                                <option key={p.id} value={p.id} disabled={!p.in_stock}>
+                                                                    {optionLabel(p)}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                        <button
+                                                            onClick={() => selOpt && (setConfirm({ group, product: selOpt }), setAutoRenew(false), setPromoCode(''))}
+                                                            disabled={outOfStock}
+                                                            className={`px-4 py-2 rounded-lg text-sm font-semibold transition whitespace-nowrap ${
+                                                                outOfStock ? 'bg-zinc-200 text-zinc-400 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700 text-white'
+                                                            }`}
+                                                        >
+                                                            {outOfStock ? 'Нет' : 'Купить'}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    {cardGroups.length > visibleCards && (
+                                        <div className="text-center mt-6">
+                                            <button
+                                                onClick={() => setVisibleCards(v => v + CARDS_PAGE)}
+                                                className="px-6 py-2.5 rounded-xl border border-zinc-200 text-sm font-medium text-zinc-600 hover:border-zinc-400 hover:text-zinc-900 transition"
+                                            >
+                                                Показать ещё ({cardGroups.length - visibleCards})
+                                            </button>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    )}
+
+                    {/* ═══════════ IMPORT ═══════════ */}
+                    {view === 'import' && (
+                        <div>
+                            <BackButton onClick={() => setView('main')} />
+
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg font-bold">Мои прокси</h3>
+                                <div className="flex items-center gap-3">
+                                    {inactiveCount > 0 && (
+                                        <label className="flex items-center gap-1.5 text-xs text-zinc-500 cursor-pointer">
+                                            <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} className="accent-purple-600" />
+                                            Показать истёкшие ({inactiveCount})
+                                        </label>
+                                    )}
+                                    <button
+                                        onClick={() => loadMyProxies().catch(() => undefined)}
+                                        disabled={myLoading}
+                                        className="text-sm text-zinc-500 hover:text-zinc-800 disabled:opacity-40 flex items-center gap-1 transition"
+                                    >
+                                        <svg className={`w-4 h-4 ${myLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                        </svg>
+                                        Обновить
+                                    </button>
+                                </div>
+                            </div>
+
+                            {provisioning && (
+                                <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 mb-4 text-sm text-purple-800 flex items-center gap-3">
+                                    <div className="w-4 h-4 border-2 border-purple-300 border-t-purple-700 rounded-full animate-spin shrink-0" />
+                                    Прокси выдаётся… проверка {provisioning.attempt} из {provisioning.total}
+                                </div>
+                            )}
+
+                            {myLoading && myProxies === null && (
+                                <div className="text-center py-12"><Spinner /></div>
+                            )}
+
+                            {myError && !myLoading && (
+                                <div className="text-center py-12">
+                                    <p className="text-red-600 font-medium mb-1">Не удалось загрузить прокси</p>
+                                    <p className="text-sm text-zinc-500">{myError}</p>
+                                </div>
+                            )}
+
+                            {myProxies !== null && !myError && visibleMyProxies.length === 0 && (
+                                <div className="text-center py-16">
+                                    <p className="text-zinc-400 mb-4">Нет активных прокси</p>
+                                    <button
+                                        onClick={() => setView('shop')}
+                                        className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-xl font-medium transition"
+                                    >
+                                        Перейти в магазин
+                                    </button>
+                                </div>
+                            )}
+
+                            {myProxies !== null && !myError && visibleMyProxies.length > 0 && (
+                                <>
+                                    <div className="flex gap-2 mb-4">
+                                        <button
+                                            onClick={() => importItems(importableProxies.map(toImportItem))}
+                                            disabled={importing || importableProxies.length === 0}
+                                            className="bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white px-5 py-2.5 rounded-xl font-medium transition"
+                                        >
+                                            Импортировать все ({importableProxies.length})
+                                        </button>
+                                        <button
+                                            onClick={() => importItems(importableProxies.filter(p => selectedProxies.has(p.id)).map(toImportItem))}
+                                            disabled={importing || selectedProxies.size === 0}
+                                            className="bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white px-5 py-2.5 rounded-xl font-medium transition"
+                                        >
+                                            Импортировать выбранные ({selectedProxies.size})
+                                        </button>
+                                    </div>
+
+                                    <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+                                        {visibleMyProxies.map(proxy => {
+                                            const st = STATUS_STYLES[proxy.status] || { label: proxy.status, cls: 'bg-zinc-100 text-zinc-500' };
+                                            const isRotating = proxy.category === 'residential_rotating';
+                                            return (
+                                                <label
+                                                    key={proxy.id}
+                                                    className={`flex items-center p-3 border border-zinc-200 rounded-xl transition ${
+                                                        proxy.importable ? 'hover:bg-zinc-50 cursor-pointer' : 'opacity-60'
+                                                    }`}
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        disabled={!proxy.importable}
+                                                        checked={selectedProxies.has(proxy.id)}
+                                                        onChange={(e) => {
+                                                            const s = new Set(selectedProxies);
+                                                            e.target.checked ? s.add(proxy.id) : s.delete(proxy.id);
+                                                            setSelectedProxies(s);
+                                                        }}
+                                                        className="mr-3 accent-purple-600"
+                                                    />
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="font-medium text-sm truncate flex items-center gap-2">
+                                                            <Flag code={proxy.country} className="w-5 h-[15px]" />
+                                                            <span>{proxy.country ? countryName(proxy.country) : 'Страна неизвестна'} — {proxy.public_ip || proxy.host || '—'}</span>
+                                                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${st.cls}`}>{st.label}</span>
+                                                            <span className="text-[11px] text-zinc-400 font-normal">{categoryLabel(proxy.category, proxy.access_type)}</span>
+                                                        </p>
+                                                        <p className="text-xs text-zinc-500 truncate">
+                                                            {proxy.protocol.toUpperCase()} {proxy.display || `${proxy.host}:${proxy.port}`}
+                                                            {proxy.access_expires_at && (
+                                                                <span className="ml-2 text-zinc-400">до {new Date(proxy.access_expires_at).toLocaleDateString('ru-RU')}</span>
+                                                            )}
+                                                        </p>
+                                                    </div>
+                                                    {isRotating && proxy.status === 'active' && (
+                                                        <button
+                                                            onClick={(e) => { e.preventDefault(); setRotBase(proxy); setRotResult([]); setRotCountry(''); }}
+                                                            className="ml-2 text-xs font-medium text-purple-600 hover:text-purple-800 px-2.5 py-1.5 rounded-lg hover:bg-purple-50 transition"
+                                                        >
+                                                            Доступы
+                                                        </button>
+                                                    )}
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                {/* ═══════════ BUY CONFIRMATION ═══════════ */}
+                {confirm && (() => {
+                    const price = effectivePrice(confirm.product);
+                    const enough = isNaN(balanceNum) || balanceNum >= price;
+                    return (
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center p-6 z-10">
+                            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+                                <h3 className="text-lg font-bold mb-1">Подтверждение покупки</h3>
+                                <p className="text-sm text-zinc-500 mb-4 truncate" title={confirm.group.title}>{confirm.group.title}</p>
+                                <div className="bg-zinc-50 rounded-xl p-4 space-y-2 text-sm mb-4">
+                                    <div className="flex justify-between"><span className="text-zinc-500">Тариф</span><span className="font-medium">{optionLabel(confirm.product).split(' / $')[0]}</span></div>
+                                    <div className="flex justify-between"><span className="text-zinc-500">Цена</span><span className="font-bold">${price.toFixed(2)}</span></div>
+                                    <div className="flex justify-between"><span className="text-zinc-500">Баланс</span><span className="font-medium">${balance ?? '—'}</span></div>
+                                    {!isNaN(balanceNum) && (
+                                        <div className="flex justify-between border-t border-zinc-200 pt-2">
+                                            <span className="text-zinc-500">После покупки</span>
+                                            <span className={`font-semibold ${enough ? 'text-green-600' : 'text-red-600'}`}>${(balanceNum - price).toFixed(2)}</span>
+                                        </div>
+                                    )}
+                                </div>
+                                <input
+                                    value={promoCode}
+                                    onChange={(e) => setPromoCode(e.target.value)}
+                                    placeholder="Промокод (необязательно)"
+                                    className="w-full border border-zinc-200 rounded-xl px-4 py-2.5 mb-3 text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                                />
+                                {confirm.product.auto_renew_possible && (
+                                    <label className="flex items-center gap-2 text-sm text-zinc-600 mb-4 cursor-pointer">
+                                        <input type="checkbox" checked={autoRenew} onChange={(e) => setAutoRenew(e.target.checked)} className="accent-purple-600" />
+                                        Автопродление
+                                    </label>
+                                )}
+                                {!enough && (
+                                    <p className="text-sm text-red-600 mb-3">
+                                        Недостаточно средств.{' '}
+                                        <button onClick={() => openExternal(CYBERYOZH_URL)} className="underline font-medium">Пополнить баланс</button>
+                                    </p>
+                                )}
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={handleBuy}
+                                        disabled={buying || !enough}
+                                        className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white py-3 rounded-xl font-medium transition"
+                                    >
+                                        {buying ? 'Покупка...' : `Купить за $${price.toFixed(2)}`}
+                                    </button>
+                                    <button
+                                        onClick={() => setConfirm(null)}
+                                        disabled={buying}
+                                        className="px-5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 py-3 rounded-xl font-medium transition"
+                                    >
+                                        Отмена
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })()}
+
+                {/* ═══════════ ROTATING CREDENTIALS ═══════════ */}
+                {rotBase && (
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center p-6 z-10">
+                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-full overflow-y-auto">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg font-bold">Доступы ротационного прокси</h3>
+                                <button onClick={() => setRotBase(null)} className="text-zinc-400 hover:text-zinc-700 p-1 rounded-lg hover:bg-zinc-100 transition">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                </button>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3 mb-3">
+                                <select value={rotCountry} onChange={(e) => setRotCountry(e.target.value)} className="border border-zinc-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-purple-500 focus:outline-none">
+                                    <option value="">Любая страна</option>
+                                    {POPULAR_COUNTRIES.map(c => <option key={c} value={c}>{countryName(c)}</option>)}
+                                </select>
+                                <input
+                                    type="number" min={1} max={100} value={rotAmount}
+                                    onChange={(e) => setRotAmount(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
+                                    className="border border-zinc-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                                    title="Количество"
+                                />
+                            </div>
+                            <select value={rotSession} onChange={(e) => setRotSession(e.target.value as typeof rotSession)} className="w-full border border-zinc-200 rounded-xl px-3 py-2.5 text-sm bg-white mb-4 focus:ring-2 focus:ring-purple-500 focus:outline-none">
+                                {SESSION_TYPES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                            </select>
+                            <button
+                                onClick={handleGenerateRotating}
+                                disabled={rotLoading}
+                                className="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white py-3 rounded-xl font-medium transition mb-4"
+                            >
+                                {rotLoading ? 'Генерация...' : 'Сгенерировать'}
+                            </button>
+                            {rotResult.length > 0 && (
+                                <>
+                                    <div className="space-y-1.5 max-h-48 overflow-y-auto mb-3">
+                                        {rotResult.map((r, i) => (
+                                            <div key={i} className="text-xs font-mono bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-2 truncate">{r.display}</div>
+                                        ))}
+                                    </div>
+                                    <button
+                                        onClick={() => importItems(rotResult.map(r => ({ proxy_str: r.proxy_str, country: r.country ?? null })))}
+                                        disabled={importing}
+                                        className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white py-2.5 rounded-xl font-medium transition"
+                                    >
+                                        Импортировать ({rotResult.length})
+                                    </button>
+                                </>
+                            )}
                         </div>
                     </div>
                 )}
-
-                <div className="overflow-y-auto flex-1">
-                    {view === 'login' && renderLogin()}
-                    {view === 'main' && tab === 'buy' && renderBuy()}
-                    {view === 'main' && tab === 'my' && renderMy()}
-                </div>
-
-                {view === 'main' && tab === 'my' && myProxies && myProxies.length > 0 && (
-                    <div className="flex gap-2 px-6 py-3 border-t border-[#222] bg-[#1a1a1a]">
-                        <button onClick={handleImportSelected} disabled={importing || selectedImportable === 0} className={`flex-1 ${accentBtn}`}>
-                            {importing ? 'Импорт...' : `Импортировать выбранные (${selectedImportable})`}
-                        </button>
-                        <button onClick={handleImportAll} disabled={importing || importableProxies.length === 0} className="flex-1 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-200 rounded-lg text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-                            Импортировать все активные ({importableProxies.length})
-                        </button>
-                    </div>
-                )}
-
-                {renderConfirm()}
-                {renderRotating()}
             </div>
         </div>
     );

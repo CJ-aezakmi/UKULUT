@@ -6,6 +6,7 @@ import { openExternal } from '../utils/external';
 import SXOrgModal from '../components/SXOrgModal';
 import PSBProxyModal from '../components/PSBProxyModal';
 import CyberYozhModal from '../components/CyberYozhModal';
+import CyberYozhLogo from '../components/CyberYozhLogo';
 
 export default function ProxiesPage() {
     const { showNotification } = useNotification();
@@ -237,7 +238,7 @@ export default function ProxiesPage() {
                         ➕ Добавить прокси
                     </button>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-3 gap-3">
                         <button
                             onClick={(e) => {
                                 e.preventDefault();
@@ -256,24 +257,25 @@ export default function ProxiesPage() {
                         >
                             🔐 PSB Proxy
                         </button>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
                         <button
                             onClick={(e) => {
                                 e.preventDefault();
                                 setShowCyberYozhModal(true);
                             }}
-                            className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-medium py-3 rounded-lg transition flex items-center justify-center gap-2 shadow-sm"
+                            className="bg-black hover:bg-zinc-800 text-white font-medium py-3 rounded-lg transition flex items-center justify-center gap-2"
                         >
-                            🦔 CyberYozh Прокси
+                            <CyberYozhLogo wordmark={false} className="h-5 w-5" />
+                            CyberYozh Прокси
                         </button>
+                    </div>
+
+                    <div className="flex justify-center pt-1">
                         <button
                             onClick={(e) => {
                                 e.preventDefault();
                                 openExternal('https://mobileproxy.space/?p=259034');
                             }}
-                            className="bg-gradient-to-r from-[#FF7A1A] to-[#FF9D00] hover:from-[#F06E0D] hover:to-[#F09300] text-white font-medium py-3 rounded-lg transition flex items-center justify-center gap-2 shadow-sm"
+                            className="w-1/2 bg-gradient-to-r from-[#FF7A1A] to-[#FF9D00] hover:from-[#F06E0D] hover:to-[#F09300] text-white font-medium py-3 rounded-lg transition flex items-center justify-center gap-2 shadow-sm"
                         >
                             📱 MobileProxy.Space
                         </button>

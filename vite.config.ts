@@ -13,5 +13,7 @@ export default defineConfig({
         target: ['es2021', 'chrome100', 'safari13'],
         minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
         sourcemap: !!process.env.TAURI_DEBUG,
+        // Country flags must be real files: the app CSP does not allow data: images.
+        assetsInlineLimit: (file: string) => (file.includes('flag-icons') ? false : undefined),
     },
 });
