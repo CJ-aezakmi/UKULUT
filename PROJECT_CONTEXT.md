@@ -1,203 +1,76 @@
-# Antic Browser — Project Context for AI Sessions
+# Antic Browser — Project Context
 
-> Этот файл — шпаргалка для AI-агента. Читай его в начале каждой сессии, чтобы не переоткрывать всё заново.
+> Шпаргалка для разработчика / AI-агента. Актуально на ноябрь 2026 (после v2.0.20).
 
----
+## Что это
 
-## 🏗 Что это за проект
+Антидетект-браузер: **Tauri v2 (Rust) + React 18/TypeScript/Tailwind**. Каждый профиль —
+отдельный Chromium (Playwright build) со своим `--user-data-dir`, прокси и отпечатком.
 
-**Antic Browser** — антидетект-браузер на базе **Tauri v2** + **React/TypeScript** + **Playwright Chromium**.  
-Каждый профиль запускает отдельный Chromium с изолированным `--user-data-dir` и прокси.  
-Есть встроенный **CyberYozh расширение** для подмены fingerprint.
+- Repo: `CJ-aezakmi/UKULUT` (**публичный** — никаких ключей в коммитах).
+- Автообновление делает Electron-лаунчер (`launcher/`), он же ставит Node + Playwright Chromium
+  в `%LOCALAPPDATA%\AnticBrowser\runtime`. Tauri updater не используется.
 
-- **GitHub repo**: `CJ-aezakmi/UKULUT` (приватный)
-- **Текущая версия**: `2.0.14`
-- **Лаунчер**: отдельный проект, автообновляет приложение через GitHub Releases API
+## Как работает антидетект (src-tauri/src)
 
----
+| Файл | Роль |
+|------|------|
+| `browser.rs` | поиск Chromium, флаги запуска, `Preferences` профиля, выбор таймзоны/языка (`resolve_locale`), geo-lookup прокси |
+| `cdp.rs` | CDP-контроллер: `Target.setAutoAttach(waitForDebuggerOnStart)` → в каждую страницу/фрейм/воркер до первого скрипта ставит таймзону, ядра CPU и `stealth.js` |
+| `stealth.js` | WebGL vendor/renderer, шум canvas/audio (детерминированный seed профиля), screen, deviceMemory, touch; все патчи выглядят как `[native code]` |
+| `proxy_relay.rs` | локальный HTTP-прокси на 127.0.0.1 → апстрим **HTTP или SOCKS5** с логином/паролем |
 
-## 📁 Структура проекта
+Принципы:
+- **UA и Client Hints не подменяются** — всегда реальная версия движка (подмена версии палится
+  через `Sec-CH-UA`/`userAgentData`/воркеры).
+- Таймзона/язык `auto` (по умолчанию) — по IP выхода прокси (ip-api.com через сам прокси).
+  Старые профили с `America/New_York` + `en-US` и прокси трактуются как `auto`.
+- Язык: `--lang` + `intl.accept_languages` в Preferences (нативно, в т.ч. в воркерах).
+- WebRTC: `disable_non_proxied_udp` (флаг + pref) — реальный IP не утекает.
+- `Runtime.enable` никогда не вызывается (детектируемо). `--disable-blink-features=AutomationControlled`
+  держит `navigator.webdriver=false` при подключённом CDP; `--disable-infobars` скрывает плашку
+  Chrome for Testing; `--no-sandbox` нужен из‑за ACL папки ms-playwright.
 
-```
-src/                          # Frontend (React + TypeScript + Tailwind)
-  App.tsx                     # Главный компонент, роутинг между страницами
-  main.tsx                    # Entry point
-  index.css                   # Tailwind + кастомные стили
-  types.ts                    # TypeScript типы (Profile, Proxy, etc.)
-  api.ts                      # Обёртки над Tauri invoke (все API вызовы)
-  pages/
-    ProfilesPage.tsx          # Страница профилей (создание, запуск браузера)
-    ProxiesPage.tsx           # Страница прокси (ручное добавление, проверка)
-  components/
-    PSBProxyModal.tsx         # Модалка PSB Proxy (~1030 строк, основной UI интеграции)
-  utils/
-    constants.ts              # Константы (страны, типы прокси)
-    storage.ts                # Работа с localStorage
+Проверка: стенд в истории сессии — страница сообщает значения из `<head>`, iframe, srcdoc, worker и
+HTTP-заголовки; e2e-тест `cargo test --lib launch_e2e -- --ignored` (переменные в комментарии теста).
 
-src-tauri/                    # Backend (Rust)
-  src/
-    main.rs                   # Entry point
-    lib.rs                    # Регистрация всех Tauri commands
-    commands.rs               # Tauri command handlers (~700 строк)
-    proxy_api.rs              # HTTP-клиент для PSB, SX.org, CyberYozh API (~900 строк)
-    models.rs                 # Rust структуры (serde)
-    proxy_relay.rs            # Локальный прокси-релей для профилей
-    browser.rs                # Запуск Chromium через Playwright
-  cyberyozh-extension/        # CyberYozh fingerprint extension (загружается в браузер)
-  antidetect-extension/       # Собственное расширение антидетекта
-  tauri.conf.json             # Конфиг Tauri (версия, окна, permissions)
-  Cargo.toml                  # Rust зависимости
-```
+## Интеграции прокси
 
----
+| Провайдер | Код | Примечания |
+|-----------|-----|-----------|
+| SX.org | `SXOrgModal.tsx` (HTTP из фронта через plugin-http), `proxy_api.rs` | `message` в ответах бывает объектом, `balance` — числом |
+| PSB Proxy | `PSBProxyModal.tsx`, `proxy_api.rs` (`psb_*`) | все пулы через `residential_proxy/{pool}` |
+| CyberYozh | `CyberYozhModal.tsx`, `cyberyozh.rs` | см. ниже |
+| MobileProxy.Space | кнопка-ссылка на `ProxiesPage.tsx` | партнёрская ссылка |
 
-## 🔌 Интеграции прокси-провайдеров
+CyberYozh (`https://app.cyberyozh.com`, заголовок `X-Api-Key`):
+- баланс только `GET /api/v2/users/balance/` (v1 → 401), тело — число текстом;
+- магазин `GET /api/v1/proxies/shop/`: фильтр `country_code` сервер игнорирует; датацентр —
+  `proxy_category=datacenter` + `access_type=private|shared`;
+- покупка `POST /api/v1/proxies/shop/buy_proxies/` (массив `{id, auto_renew}`), без авто‑повторов;
+- история `GET /api/v1/proxies/history/`; прокси чаще всего socks5 / `socks5_http` (`connection_ports`);
+- жёсткий rate limit («Request was throttled») — клиент сам выдерживает паузу;
+- ссылка «Получить API ключ»: `https://app.cyberyozh.com/catalog/?utm_source=antic`.
 
-### PSB Proxy (основной, наиболее сложный)
-- **API Base**: `https://psbproxy.io/api/`
-- **Auth**: Bearer token (API ключ из личного кабинета)
-- **Ключ получается по ссылке**: `http://psbproxy.io/?utm_source=partner&utm_medium=soft&utm_term=antic&utm_campaign=openincognito`
+## Версия и релиз
 
-#### Endpoints:
-| Действие | Метод | URL |
-|----------|-------|-----|
-| Каталог продуктов | GET | `/api/products` (public, без auth) |
-| Купить продукт | POST | `/api/products/{id}/buy` + `{"payment_type": "balance"}` |
-| Создать SubUser | POST | `/api/residential_proxy/{pool}/sub-users` |
-| Список SubUsers | GET | `/api/residential_proxy/{pool}/sub-users` |
-| Выдать трафик | POST | `/api/residential_proxy/{pool}/sub-users/{id}/give-traffic` |
-| Забрать трафик | POST | `/api/residential_proxy/{pool}/sub-users/{id}/take-traffic` |
-| Удалить SubUser | DELETE | `/api/residential_proxy/{pool}/sub-users/{id}` |
-| Генерация прокси | POST | `/api/residential_proxy/{pool}/sub-users/{id}/proxy-list` |
-| Whitelist IP | POST/DELETE | `/api/residential_proxy/{pool}/sub-users/{id}/whitelist` |
+Версия в 4 местах: `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`,
+`src-tauri/Cargo.lock` (пакет `app`).
 
-#### Типы пулов (все через `residential_proxy/{pool}`):
-| Тип | pool параметр | Product type |
-|-----|---------------|-------------|
-| Residential Pool-1 | `pool-1` | `residential-proxy-pool-1` |
-| Residential Pool-2 | `pool-2` | `residential-proxy-pool-2` |
-| Mobile | `pool-1` | `mobile-proxy-pool-1` |
-| Datacenter | `pool-1` | `datacenter-proxy-pool-1` |
-
-#### Flow создания SubUser:
-1. `GET /api/products` → показать пакеты (1/10/100/500/1000 GB с ценами)
-2. Пользователь выбирает пакет
-3. `POST /api/products/{id}/buy` → покупка
-4. `POST /api/residential_proxy/{pool}/sub-users` → создание SubUser
-5. `POST .../give-traffic` → передача трафика на SubUser
-
-#### Обработка ошибок:
-- Backend: `psb_parse_error(status, body)` в `proxy_api.rs` — парсит HTTP ошибки в русские сообщения
-- Frontend: `cleanError(error)` в `PSBProxyModal.tsx` — убирает "Failed to..." префиксы от Tauri
-
-### SX.org Proxy
-- Простая интеграция, прокси по API ключу
-- Файл: `proxy_api.rs` (функции `sx_*`)
-
-### CyberYozh VPN
-- Расширение для браузера
-- Файл: `proxy_api.rs` (функции `cyberyozh_*`)
-
----
-
-## 🔧 Версии и конфиги
-
-Версия хранится в **3 местах** (все должны совпадать!):
-1. `package.json` → `"version": "X.Y.Z"`
-2. `src-tauri/tauri.conf.json` → `"version": "X.Y.Z"`
-3. `src-tauri/Cargo.toml` → `version = "X.Y.Z"`
-
-### Bump версии:
-```
-package.json         → "version": "2.0.XX"
-tauri.conf.json      → "version": "2.0.XX"  
-Cargo.toml           → version = "2.0.XX"
-```
-
-### Сборка и публикация:
+GitHub Actions заблокирован по биллингу (с 08.2026) → релиз локально:
 ```powershell
-# 1. Bump version в 3 файлах
-# 2. Commit + tag
-git add -A
-git commit -m "v2.0.XX: описание"
-git tag v2.0.XX
-git push origin main --tags
-
-# 3. Build
-npm run tauri build 2>&1
-
-# 4. GitHub Release
-gh.exe release create v2.0.XX "src-tauri/target/release/bundle/nsis/Antic Browser_2.0.XX_x64-setup.exe" --title "Antic Browser v2.0.XX" --notes "описание"
-
-# 5. Windows Defender exclusions (от имени админа)
-Add-MpPreference -ExclusionPath "путь_к_exe"
-Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\AnticBrowser"
+npm run tauri build
+# артефакты: src-tauri/target/release/bundle/{nsis,msi}
+gh release create vX.Y.Z --draft <nsis.exe> <msi...>
+# догрузить ассет лаунчера Antic.Browser_2.0.1_x64-setup.exe из прошлого релиза
+gh release edit vX.Y.Z --draft=false --latest
 ```
+Лаунчер ищет ассет `*_x64-setup.exe`, содержащий `_<версия>_`.
 
-### Запуск dev:
-```powershell
-# Сначала ОБЯЗАТЕЛЬНО освободить порт 3000!
-Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
-Start-Sleep 1
-npm run tauri dev
-```
+## Подводные камни
 
----
-
-## 📝 История изменений (ключевые)
-
-### v2.0.14 (08.02.2026)
-- PSB: покупка трафика прямо из приложения (каталог продуктов)
-- PSB: полный flow buy → create SubUser → give traffic
-- PSB: читаемые ошибки на русском (`psb_parse_error`)
-- PSB: новый дизайн кнопок пулов (градиенты, иконки, подписи)
-- PSB: ссылки обновлены (Купить трафик → psbproxy.io/account, API ключ → партнёрская ссылка)
-
-### v2.0.13 (ранее)
-- PSB: исправлены пути API (были сломаны, использовались неправильные URL)
-- PSB: все 4 типа SubUser работают
-- Revert-ы ошибочных изменений API путей
-
-### v2.0.12 и ранее
-- CyberYozh extension интеграция
-- Antidetect extension
-- Базовый прокси-менеджмент
-- Профили с изолированным Chromium
-
----
-
-## ⚠️ Известные проблемы / подводные камни
-
-1. **Порт 3000**: Часто остаётся занят после `npm run tauri dev`. Всегда освобождай перед запуском!
-2. **Cargo.toml версия**: Раньше отставала от остальных. Проверяй все 3 файла при bump.
-3. **PSB API пути**: ВСЕ типы прокси идут через `residential_proxy/{pool}` — НЕ через `mobile_proxy` или `datacenter_proxy`!
-4. **gh command**: В терминале PowerShell иногда добавляется ghost-символ перед `gh`. Используй `gh.exe` явно.
-5. **Windows Defender**: Может блокировать .exe. Добавляй exclusion при каждой сборке.
-6. **Кодировка терминала**: Для `gh.exe` и команд с русским текстом ставь `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`
-
----
-
-## 🗂 Ключевые файлы для редактирования
-
-| Задача | Файл |
-|--------|------|
-| Новый API endpoint | `src-tauri/src/proxy_api.rs` + `commands.rs` + `lib.rs` + `src/api.ts` |
-| UI PSB Proxy | `src/components/PSBProxyModal.tsx` |
-| UI профилей | `src/pages/ProfilesPage.tsx` |
-| UI прокси | `src/pages/ProxiesPage.tsx` |
-| Типы данных | `src/types.ts` + `src-tauri/src/models.rs` |
-| Запуск браузера | `src-tauri/src/browser.rs` |
-| Прокси-релей | `src-tauri/src/proxy_relay.rs` |
-| Tauri конфиг | `src-tauri/tauri.conf.json` |
-| Permissions | `src-tauri/capabilities/default.json` |
-
----
-
-## 💬 Пользователь
-
-- Общается на **русском**
-- Хочет **полностью рабочие** фичи, не заглушки
-- Ценит **красивый UI** (градиенты, анимации, иконки)
-- Проверяет всё **вручную** после каждого изменения
-- Просит **запустить** (`npm run tauri dev`) для проверки
-- Просит **собрать и выложить** на GitHub при готовности
+1. Порт 3000 бывает занят после `npm run tauri dev`.
+2. `release.ps1` не запускать: `git add .`, переформатирует JSON, висит на `Read-Host`.
+3. Лаунчер 2.0.1 читает версию из несуществующего `resources/app/package.json` → переустанавливает
+   приложение при каждом запуске (не исправлено, лаунчер не пересобирается).
+4. Windows Defender может ругаться на свежий exe.

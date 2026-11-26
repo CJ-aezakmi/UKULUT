@@ -111,7 +111,11 @@ impl ProxyApiClient {
             .await?;
 
         let balance_data: SXOrgBalanceResponse = balance_response.json().await?;
-        let balance = balance_data.balance.unwrap_or_else(|| "0.00".to_string());
+        let balance = match balance_data.balance {
+            Some(serde_json::Value::Number(n)) => format!("{:.2}", n.as_f64().unwrap_or(0.0)),
+            Some(serde_json::Value::String(s)) => s,
+            _ => "0.00".to_string(),
+        };
 
         Ok((true, format!("Баланс: ${}", balance)))
     }
@@ -234,7 +238,12 @@ impl ProxyApiClient {
                 .collect();
             Ok(proxy_strings)
         } else {
-            Err(anyhow!(data.message.unwrap_or_else(|| "Неизвестная ошибка".to_string())))
+            let msg = match data.message {
+                Some(serde_json::Value::String(s)) => s,
+                Some(other) => other.to_string(),
+                None => "Неизвестная ошибка".to_string(),
+            };
+            Err(anyhow!(msg))
         }
     }
 
@@ -823,5 +832,21 @@ impl ProxyApiClient {
         
         let data: serde_json::Value = response.json().await?;
         Ok(data["ip"].as_str().unwrap_or("Unknown").to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::models::*;
+
+    /// Shapes observed from the live SX.org API (Nov 2026).
+    #[test]
+    fn sx_org_live_shapes_deserialize() {
+        let plan = r#"{"success":true,"message":{"tariff":"Pay as you go","traff":0}}"#;
+        assert!(serde_json::from_str::<SXOrgResponse<serde_json::Value>>(plan).unwrap().success);
+        let bal = r#"{"success":true,"balance":-0.0231854338,"balance_traffic":0}"#;
+        assert!(serde_json::from_str::<SXOrgBalanceResponse>(bal).unwrap().balance.is_some());
+        let err = r#"{"success":false,"message":"Invalid apiKey"}"#;
+        assert!(!serde_json::from_str::<SXOrgResponse<serde_json::Value>>(err).unwrap().success);
     }
 }

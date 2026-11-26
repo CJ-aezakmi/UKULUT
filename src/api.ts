@@ -6,6 +6,14 @@ import type {
     SXOrgCountry,
     SXOrgState,
     SXOrgCity,
+    CyberYozhBalance,
+    CyberYozhShopCatalog,
+    CyberYozhBuyResult,
+    CyberYozhMyProxy,
+    CyberYozhImportItem,
+    CyberYozhImportResult,
+    CyberYozhRotatingRequest,
+    CyberYozhGeneratedProxy,
 } from './types';
 
 // ============================================================================
@@ -98,6 +106,53 @@ export async function sxOrgCreateProxy(params: {
     proxyName: string;
 }): Promise<string[]> {
     return await invoke('sx_org_create_proxy', params);
+}
+
+// ============================================================================
+// CYBERYOZH API (all HTTP happens in Rust: src-tauri/src/cyberyozh.rs)
+// ============================================================================
+
+/** Prefix of the error returned when CyberYozh throttles requests. */
+export const CYBERYOZH_THROTTLE_PREFIX = 'Слишком много запросов к CyberYozh';
+
+export async function cyberyozhValidateKey(apiKey: string): Promise<CyberYozhBalance> {
+    return await invoke('cyberyozh_validate_key', { apiKey });
+}
+
+export async function cyberyozhGetBalance(apiKey: string): Promise<string> {
+    return await invoke('cyberyozh_get_balance', { apiKey });
+}
+
+export async function cyberyozhGetShop(
+    apiKey: string,
+    category: string,
+    accessType?: string
+): Promise<CyberYozhShopCatalog> {
+    return await invoke('cyberyozh_get_shop', { apiKey, category, accessType });
+}
+
+export async function cyberyozhBuyProxy(
+    apiKey: string,
+    productId: string,
+    autoRenew: boolean,
+    promoCode?: string
+): Promise<CyberYozhBuyResult> {
+    return await invoke('cyberyozh_buy_proxy', { apiKey, productId, autoRenew, promoCode });
+}
+
+export async function cyberyozhGetMyProxies(apiKey: string): Promise<CyberYozhMyProxy[]> {
+    return await invoke('cyberyozh_get_my_proxies', { apiKey });
+}
+
+export async function cyberyozhImportProxies(items: CyberYozhImportItem[]): Promise<CyberYozhImportResult> {
+    return await invoke('cyberyozh_import_proxies', { items });
+}
+
+export async function cyberyozhGenerateRotating(
+    apiKey: string,
+    request: CyberYozhRotatingRequest
+): Promise<CyberYozhGeneratedProxy[]> {
+    return await invoke('cyberyozh_generate_rotating', { apiKey, request });
 }
 
 // ============================================================================
@@ -219,76 +274,6 @@ export async function psbImportProxy(
         countryCode: countryCode || null,
     });
 }
-
-// ============================================================================
-// CONSTANTS
-// ============================================================================
-
-export const SCREENS = [
-    '800×600',
-    '960×540',
-    '1024×768',
-    '1152×864',
-    '1280×720',
-    '1280×768',
-    '1280×800',
-    '1280×1024',
-    '1366×768',
-    '1408×792',
-    '1440×900',
-    '1400×1050',
-    '1440×1080',
-    '1536×864',
-    '1600×900',
-    '1600×1024',
-    '1600×1200',
-    '1680×1050',
-    '1920×1080',
-    '1920×1200',
-    '2048×1152',
-    '2560×1080',
-    '2560×1440',
-    '3440×1440',
-];
-
-export const LANGUAGES = [
-    'en-US',
-    'en-GB',
-    'fr-FR',
-    'ru-RU',
-    'es-ES',
-    'pl-PL',
-    'pt-PT',
-    'nl-NL',
-    'zh-CN',
-    'de-DE',
-    'it-IT',
-    'ja-JP',
-    'ko-KR',
-];
-
-export const TIMEZONES = [
-    'America/New_York',
-    'America/Chicago',
-    'America/Los_Angeles',
-    'America/Toronto',
-    'Europe/London',
-    'Europe/Paris',
-    'Europe/Berlin',
-    'Europe/Moscow',
-    'Asia/Tokyo',
-    'Asia/Shanghai',
-    'Asia/Seoul',
-    'Australia/Sydney',
-];
-
-export const USER_AGENTS = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
-];
 
 // ============================================================================
 // NAMESPACE EXPORTS FOR CONVENIENCE

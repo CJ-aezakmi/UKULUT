@@ -66,47 +66,38 @@ pub async fn launch_profile(
         .get_profile(&profile_name)
         .ok_or_else(|| "Profile not found".to_string())?;
 
-    // Find the antidetect-extension template directory
-    use std::env;
-
-    let current_exe = env::current_exe().map_err(|e| e.to_string())?;
-    let exe_dir = current_exe.parent().ok_or("Failed to get exe directory")?;
-
-    // In dev mode: antidetect-extension is in src-tauri/
-    // In release mode: antidetect-extension should be next to .exe
-    let extension_template_dir = if cfg!(debug_assertions) {
-        // Dev mode: go up 3 levels from target/debug/ to src-tauri/
-        exe_dir.parent()
-            .and_then(|p| p.parent())
-            .and_then(|p| p.parent())
-            .ok_or("Failed to find project root")?
-            .join("src-tauri")
-            .join("antidetect-extension")
-    } else {
-        // Release mode: extension template next to .exe
-        exe_dir.join("antidetect-extension")
-    };
-
-    if !extension_template_dir.exists() {
-        return Err(format!(
-            "Anti-detect extension template not found at: {:?}",
-            extension_template_dir
-        ));
-    }
-
-    #[cfg(debug_assertions)]
-    {
-        println!("[LaunchProfile] Extension template: {:?}", extension_template_dir);
-    }
-
-    // Launch Chrome with anti-detect profile
-    match browser::launch_chrome(&profile, &extension_template_dir, None) {
-        Ok(child) => {
-            process_manager.add_process(child);
-            Ok(format!("Profile '{}' launched successfully", profile_name))
+    // Timezone/language "auto" follow the proxy exit IP. Look it up through the proxy;
+    // fall back to the country saved with the proxy (from its last check).
+    let proxy = profile.proxy.clone().filter(|p| !p.trim().is_empty());
+    let (geo, proxy_country) = match &proxy {
+        Some(p) => {
+            let saved_country = storage
+                .get_proxies()
+                .into_iter()
+                .find(|x| &x.proxy_str == p)
+                .and_then(|x| x.country)
+                .filter(|c| c.len() == 2);
+            (browser::lookup_proxy_geo(p).await, saved_country)
         }
-        Err(e) => Err(format!("Failed to launch browser: {}", e)),
+        None => (None, None),
+    };
+    let locale = browser::resolve_locale(&profile, proxy_country.as_deref(), geo);
+
+    let child = browser::launch_chrome(&profile, &locale)?;
+    process_manager.add_process(child);
+
+    let mut details = Vec::new();
+    if let Some(tz) = &locale.timezone {
+        details.push(tz.clone());
     }
+    if let Some(lang) = &locale.lang {
+        details.push(lang.clone());
+    }
+    Ok(if details.is_empty() {
+        format!("Профиль «{}» запущен", profile_name)
+    } else {
+        format!("Профиль «{}» запущен ({})", profile_name, details.join(", "))
+    })
 }
 
 // ============================================================================

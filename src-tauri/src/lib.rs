@@ -1,5 +1,7 @@
 mod browser;
+mod cdp;
 mod commands;
+mod cyberyozh;
 mod models;
 mod proxy_api;
 mod proxy_checker;
@@ -62,6 +64,15 @@ pub fn run() {
       commands::sx_org_get_states,
       commands::sx_org_get_cities,
       commands::sx_org_create_proxy,
+      
+      // CyberYozh commands
+      cyberyozh::cyberyozh_validate_key,
+      cyberyozh::cyberyozh_get_balance,
+      cyberyozh::cyberyozh_get_shop,
+      cyberyozh::cyberyozh_buy_proxy,
+      cyberyozh::cyberyozh_get_my_proxies,
+      cyberyozh::cyberyozh_import_proxies,
+      cyberyozh::cyberyozh_generate_rotating,
       
       // PSB Proxy commands
       commands::psb_validate_key,

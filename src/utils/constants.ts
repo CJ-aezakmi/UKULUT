@@ -1,13 +1,9 @@
-export const USER_AGENTS = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-];
+/** Value for "pick automatically" (timezone / language follow the proxy IP). */
+export const AUTO = 'auto';
 
-export const getRandomUserAgent = () => {
-    return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
-};
+/** Typical desktop values (navigator.hardwareConcurrency / navigator.deviceMemory). */
+export const CPU_OPTIONS = [2, 4, 6, 8, 12, 16];
+export const RAM_OPTIONS = [2, 4, 8, 16];
 
 export const SCREENS = [
     '800×600',

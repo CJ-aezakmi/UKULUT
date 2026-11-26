@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Profile, Proxy } from '../types';
 import * as api from '../api';
-import { SCREENS, LANGUAGES, TIMEZONES, parseScreenResolution, getRandomUserAgent } from '../utils/constants';
+import { SCREENS, LANGUAGES, TIMEZONES, CPU_OPTIONS, RAM_OPTIONS, AUTO, parseScreenResolution } from '../utils/constants';
 import { useNotification } from '../utils/notifications';
 
 export default function ProfilesPage() {
@@ -14,11 +14,11 @@ export default function ProfilesPage() {
 
     const emptyProfile: Profile = {
         name: '',
-        user_agent: getRandomUserAgent(),
-        screen_width: 1366,
-        screen_height: 768,
-        timezone: 'America/New_York',
-        lang: 'en-US',
+        user_agent: AUTO,
+        screen_width: 1920,
+        screen_height: 1080,
+        timezone: AUTO,
+        lang: AUTO,
         proxy: null,
         cookies: null,
         webgl: true,
@@ -54,7 +54,7 @@ export default function ProfilesPage() {
             setFormData(profile);
         } else {
             setEditingProfile(null);
-            setFormData({ ...emptyProfile, user_agent: getRandomUserAgent() });
+            setFormData(emptyProfile);
         }
         setShowModal(true);
     };
@@ -97,8 +97,8 @@ export default function ProfilesPage() {
         setLaunching(new Set(launching).add(profileName));
 
         try {
-            await api.launchProfile(profileName);
-            showNotification('Успех', `Профиль "${profileName}" запущен`, 'success', 3000);
+            const message = await api.launchProfile(profileName);
+            showNotification('Успех', message || `Профиль "${profileName}" запущен`, 'success', 4000);
         } catch (error: any) {
             showNotification('Ошибка запуска', String(error), 'error', 7000);
         } finally {
@@ -111,10 +111,6 @@ export default function ProfilesPage() {
     const handleScreenChange = (screen: string) => {
         const { width, height } = parseScreenResolution(screen);
         setFormData({ ...formData, screen_width: width, screen_height: height });
-    };
-
-    const handleRandomUA = () => {
-        setFormData({ ...formData, user_agent: getRandomUserAgent() });
     };
 
     const getProxyInfo = (proxyStr: string | null | undefined) => {
@@ -188,9 +184,9 @@ export default function ProfilesPage() {
                                             <circle cx="12" cy="12" r="10" strokeWidth="2" />
                                             <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" strokeWidth="2" />
                                         </svg>
-                                        <span>{profile.lang}</span>
+                                        <span>{profile.lang === AUTO ? 'Язык: авто' : profile.lang}</span>
                                         <span className="text-gray-400">•</span>
-                                        <span className="text-gray-600 truncate">{profile.timezone.split('/').pop()}</span>
+                                        <span className="text-gray-600 truncate">{profile.timezone === AUTO ? 'Время: авто' : profile.timezone.split('/').pop()}</span>
                                     </div>
 
                                     {/* Proxy Info */}
@@ -269,22 +265,12 @@ export default function ProfilesPage() {
                                     />
                                 </div>
 
-                                <div>
-                                    <label className="block text-sm font-medium mb-1">User Agent</label>
-                                    <div className="flex gap-2">
-                                        <input
-                                            type="text"
-                                            value={formData.user_agent}
-                                            onChange={(e) => setFormData({ ...formData, user_agent: e.target.value })}
-                                            className="flex-1 border rounded px-3 py-2 text-sm"
-                                        />
-                                        <button
-                                            onClick={handleRandomUA}
-                                            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-                                        >
-                                            🎲
-                                        </button>
-                                    </div>
+                                <div className="flex items-start gap-2 rounded border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-900">
+                                    <span className="text-base leading-none">🛡️</span>
+                                    <span>
+                                        User-Agent и Client Hints берутся из встроенного Chromium и всегда совпадают с его версией —
+                                        подмена версии выдаёт антидетект. Часовой пояс и язык в режиме «Авто» подбираются по IP прокси при каждом запуске.
+                                    </span>
                                 </div>
 
                                 <div>
@@ -308,6 +294,10 @@ export default function ProfilesPage() {
                                             onChange={(e) => setFormData({ ...formData, lang: e.target.value })}
                                             className="w-full border rounded px-3 py-2"
                                         >
+                                            <option value={AUTO}>Авто (по стране прокси)</option>
+                                            {!LANGUAGES.some((l) => l.code === formData.lang) && formData.lang !== AUTO && (
+                                                <option value={formData.lang}>{formData.lang}</option>
+                                            )}
                                             {LANGUAGES.map((lang) => (
                                                 <option key={lang.code} value={lang.code}>{lang.name}</option>
                                             ))}
@@ -321,6 +311,10 @@ export default function ProfilesPage() {
                                             onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
                                             className="w-full border rounded px-3 py-2"
                                         >
+                                            <option value={AUTO}>Авто (по IP прокси)</option>
+                                            {!TIMEZONES.includes(formData.timezone) && formData.timezone !== AUTO && (
+                                                <option value={formData.timezone}>{formData.timezone}</option>
+                                            )}
                                             {TIMEZONES.map((tz) => (
                                                 <option key={tz} value={tz}>{tz}</option>
                                             ))}
@@ -351,44 +345,35 @@ export default function ProfilesPage() {
                                         value={formData.homepage}
                                         onChange={(e) => setFormData({ ...formData, homepage: e.target.value })}
                                         className="w-full border rounded px-3 py-2"
-                                        placeholder="https://whoer.net"
+                                        placeholder="https://2ip.ru"
                                     />
                                 </div>
 
-                                <div className="grid grid-cols-3 gap-4">
+                                <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-sm font-medium mb-1">CPU ядер</label>
-                                        <input
-                                            type="number"
+                                        <select
                                             value={formData.cpu}
                                             onChange={(e) => setFormData({ ...formData, cpu: parseInt(e.target.value) })}
                                             className="w-full border rounded px-3 py-2"
-                                            min="1"
-                                            max="32"
-                                        />
+                                        >
+                                            {[...new Set([...CPU_OPTIONS, formData.cpu])].sort((a, b) => a - b).map((n) => (
+                                                <option key={n} value={n}>{n}</option>
+                                            ))}
+                                        </select>
                                     </div>
 
                                     <div>
                                         <label className="block text-sm font-medium mb-1">RAM (ГБ)</label>
-                                        <input
-                                            type="number"
+                                        <select
                                             value={formData.ram}
                                             onChange={(e) => setFormData({ ...formData, ram: parseInt(e.target.value) })}
                                             className="w-full border rounded px-3 py-2"
-                                            min="1"
-                                            max="128"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">Vendor</label>
-                                        <input
-                                            type="text"
-                                            value={formData.vendor}
-                                            onChange={(e) => setFormData({ ...formData, vendor: e.target.value })}
-                                            className="w-full border rounded px-3 py-2"
-                                            placeholder="Google Inc."
-                                        />
+                                        >
+                                            {[...new Set([...RAM_OPTIONS, formData.ram])].sort((a, b) => a - b).map((n) => (
+                                                <option key={n} value={n}>{n}</option>
+                                            ))}
+                                        </select>
                                     </div>
                                 </div>
 

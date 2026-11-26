@@ -95,14 +95,16 @@ pub struct SXOrgCity {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SXOrgResponse<T> {
     pub success: bool,
-    pub message: Option<String>,
+    /// String on errors, object (plan info, ports…) on success.
+    pub message: Option<serde_json::Value>,
     pub data: Option<T>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SXOrgBalanceResponse {
     pub success: bool,
-    pub balance: Option<String>,
+    /// API returns a number (e.g. -0.0231854338); older versions returned a string.
+    pub balance: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -134,7 +136,7 @@ pub struct SXOrgProxyData {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SXOrgCreateProxyResponse {
     pub success: bool,
-    pub message: Option<String>,
+    pub message: Option<serde_json::Value>,
     pub data: Option<Vec<SXOrgProxyData>>,
 }
 

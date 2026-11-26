@@ -78,4 +78,5 @@ cyberyozh_extension.crx
 download_*.py
 *.yaml
 GeoLite2-*.mmdb
-# proxy-extension/ - теперь включено в git для упаковки в MSI
+*.mmdb
+кибереж хтмл/
